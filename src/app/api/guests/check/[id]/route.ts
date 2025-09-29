@@ -1,19 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { promises as fs } from 'fs';
-import path from 'path';
 import { GuestData, APIResponse } from '../../../../../types';
-
-const DATA_FILE = path.join(process.cwd(), 'data', 'guest-entries.json');
-
-async function readGuestData(): Promise<GuestData[]> {
-  try {
-    const data = await fs.readFile(DATA_FILE, 'utf8');
-    return JSON.parse(data);
-  } catch (error) {
-    console.log('No existing data file');
-    return [];
-  }
-}
+import { getDb } from '../../../../../lib/mongodb';
 
 export async function GET(
   request: NextRequest,
@@ -30,26 +17,27 @@ export async function GET(
       }, { status: 400 });
     }
 
-    const guests = await readGuestData();
+    const db = await getDb();
+    const collection = db.collection<GuestData>('guestEntries');
 
-    // Check if there's an active entry (without endTime) for this ID
-    const activeEntry = guests.find(
-      guest => guest.id === decodedId && !guest.endTime
+    // Active entry: most recent with no endTime
+    const activeEntry: any = await collection.findOne(
+      { id: decodedId, endTime: { $exists: false } },
+      { sort: { entryTime: -1 } }
     );
 
-    // Check if there was a recent checkout (within last 5 minutes)
-    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
-    const recentCheckout = guests.find(
-      guest => guest.id === decodedId && 
-      guest.endTime && 
-      new Date(guest.endTime) > fiveMinutesAgo
+    // Recent checkout within last 5 minutes
+    const fiveMinutesAgoIso = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const recentCheckout = await collection.findOne(
+      { id: decodedId, endTime: { $gt: fiveMinutesAgoIso } },
+      { sort: { endTime: -1 } }
     );
 
     return NextResponse.json({
       success: true,
       isCheckout: !!activeEntry,
       recentCheckout: !!recentCheckout,
-      data: activeEntry || null
+      data: activeEntry ? { ...activeEntry, _id: undefined } : null
     });
 
   } catch (error) {

@@ -1,23 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { promises as fs } from 'fs';
-import path from 'path';
 import { GuestData, APIResponse } from '../../../types';
-
-const DATA_FILE = path.join(process.cwd(), 'data', 'guest-entries.json');
-
-async function readGuestData(): Promise<GuestData[]> {
-  try {
-    const data = await fs.readFile(DATA_FILE, 'utf8');
-    return JSON.parse(data);
-  } catch (error) {
-    console.log('No existing data file, creating new one');
-    return [];
-  }
-}
-
-async function writeGuestData(data: GuestData[]): Promise<void> {
-  await fs.writeFile(DATA_FILE, JSON.stringify(data, null, 2));
-}
+import { getDb } from '../../../lib/mongodb';
 
 export async function POST(request: NextRequest): Promise<NextResponse<APIResponse>> {
   try {
@@ -31,15 +14,16 @@ export async function POST(request: NextRequest): Promise<NextResponse<APIRespon
       }, { status: 400 });
     }
 
-    const guests = await readGuestData();
-
     if (action === 'checkout') {
+      const db = await getDb();
+      const collection = db.collection<GuestData>('guestEntries');
       // Find the most recent entry without an endTime
-      const activeEntryIndex = guests.findIndex(
-        guest => guest.id === id && !guest.endTime
+      const activeEntry: any = await collection.findOne(
+        { id, endTime: { $exists: false } },
+        { sort: { entryTime: -1 } }
       );
 
-      if (activeEntryIndex === -1) {
+      if (!activeEntry) {
         return NextResponse.json({
           success: false,
           error: 'No active entry found for this ID'
@@ -47,14 +31,13 @@ export async function POST(request: NextRequest): Promise<NextResponse<APIRespon
       }
 
       // Update the entry with endTime
-      guests[activeEntryIndex].endTime = new Date().toISOString();
-
-      await writeGuestData(guests);
+      const endTime = new Date().toISOString();
+      await collection.updateOne({ _id: activeEntry._id }, { $set: { endTime } });
 
       return NextResponse.json({
         success: true,
         message: 'Guest checked out successfully',
-        data: guests[activeEntryIndex]
+        data: { ...activeEntry, endTime }
       });
 
     } else if (action === 'checkin') {
@@ -66,6 +49,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<APIRespon
         }, { status: 400 });
       }
 
+      const db = await getDb();
+      const collection = db.collection<GuestData>('guestEntries');
+
       const newGuest: GuestData = {
         id,
         type,
@@ -74,8 +60,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<APIRespon
         entryTime: new Date().toISOString(),
       };
 
-      guests.push(newGuest);
-      await writeGuestData(guests);
+      await collection.insertOne(newGuest as any);
 
       return NextResponse.json({
         success: true,
@@ -100,7 +85,14 @@ export async function POST(request: NextRequest): Promise<NextResponse<APIRespon
 
 export async function GET(): Promise<NextResponse<APIResponse>> {
   try {
-    const guests = await readGuestData();
+    const db = await getDb();
+    const collection = db.collection<GuestData>('guestEntries');
+    const docs = await collection.find({}).sort({ entryTime: -1 }).toArray();
+    // Strip _id for API response to align with GuestData type
+    const guests: GuestData[] = docs.map((doc: any) => {
+      const { _id, ...rest } = doc;
+      return rest as GuestData;
+    });
     return NextResponse.json({
       success: true,
       data: guests
