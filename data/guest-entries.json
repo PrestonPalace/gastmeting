@@ -1,0 +1,73 @@
+[
+  {
+    "id": "04:a8:52:ca:70:1d:90",
+    "type": "hotelgast",
+    "adults": 1,
+    "children": 1,
+    "entryTime": "2025-09-29T14:10:58.349Z",
+    "endTime": "2025-09-29T14:11:04.254Z"
+  },
+  {
+    "id": "04:a8:52:ca:70:1d:90",
+    "type": "daggast",
+    "adults": 1,
+    "children": 2,
+    "entryTime": "2025-09-29T14:11:15.542Z",
+    "endTime": "2025-09-29T14:11:20.417Z"
+  },
+  {
+    "id": "04:74:24:6a:fa:1e:91",
+    "type": "hotelgast",
+    "adults": 3,
+    "children": 0,
+    "entryTime": "2025-09-29T14:11:32.232Z",
+    "endTime": "2025-09-29T14:11:48.294Z"
+  },
+  {
+    "id": "04:a8:52:ca:70:1d:90",
+    "type": "zwembadgast",
+    "adults": 1,
+    "children": 0,
+    "entryTime": "2025-09-29T14:11:42.294Z",
+    "endTime": "2025-09-29T14:11:53.192Z"
+  },
+  {
+    "id": "04:a8:52:ca:70:1d:90",
+    "type": "zwembadgast",
+    "adults": 2,
+    "children": 1,
+    "entryTime": "2025-09-29T14:15:07.986Z",
+    "endTime": "2025-09-29T14:15:34.683Z"
+  },
+  {
+    "id": "04:74:24:6a:fa:1e:91",
+    "type": "hotelgast",
+    "adults": 1,
+    "children": 3,
+    "entryTime": "2025-09-29T14:15:21.664Z",
+    "endTime": "2025-09-29T14:20:05.689Z"
+  },
+  {
+    "id": "04:a8:52:ca:70:1d:90",
+    "type": "daggast",
+    "adults": 4,
+    "children": 0,
+    "entryTime": "2025-09-29T14:15:56.051Z",
+    "endTime": "2025-09-29T14:16:26.906Z"
+  },
+  {
+    "id": "04:a8:52:ca:70:1d:90",
+    "type": "daggast",
+    "adults": 1,
+    "children": 0,
+    "entryTime": "2025-09-29T14:19:45.574Z",
+    "endTime": "2025-09-29T14:19:56.268Z"
+  },
+  {
+    "id": "04:a8:52:ca:70:1d:90",
+    "type": "daggast",
+    "adults": 1,
+    "children": 0,
+    "entryTime": "2025-09-29T14:20:02.410Z"
+  }
+]
