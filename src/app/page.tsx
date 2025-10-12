@@ -29,18 +29,23 @@ export default function Home() {
     setError('');
     setIsScanning(true);
 
-    // Check if NFC is supported
-    if (!('NDEFReader' in window)) {
-      setError('NFC wordt niet ondersteund op dit apparaat. Gebruik Chrome of Edge op Android.');
-      setIsScanning(false);
-      return;
-    }
-
     try {
+      // Check if NFC is supported, but don't stop execution
+      if (!('NDEFReader' in window)) {
+        setError('NFC wordt niet ondersteund op dit apparaat. Gebruik Chrome of Edge op Android.');
+        setIsScanning(false);
+        return;
+      }
+
       // @ts-ignore - NDEFReader is not in TypeScript definitions yet
-      const ndef = new NDEFReader();
+      const ndef = new window.NDEFReader();
       
-      // Set up event listeners before scanning
+      // Set up event listeners BEFORE calling scan
+      ndef.addEventListener('readingerror', () => {
+        setError('Fout bij het lezen van de armband. Probeer het opnieuw.');
+        setIsScanning(false);
+      });
+
       ndef.addEventListener('reading', ({ serialNumber }: any) => {
         console.log('NFC tag detected:', serialNumber);
         setNfcId(serialNumber);
@@ -49,27 +54,20 @@ export default function Home() {
         checkScanStatus(serialNumber);
       });
 
-      ndef.addEventListener('readingerror', () => {
-        setError('Fout bij het lezen van de armband. Probeer het opnieuw.');
-        setIsScanning(false);
-      });
-
-      // This will trigger the permission prompt if not already granted
+      // Now call scan - this will trigger the permission prompt
       await ndef.scan();
       console.log('NFC scan started successfully');
       
-    } catch (err: any) {
-      console.error('NFC Error:', err);
+    } catch (error: any) {
+      console.error('NFC Error:', error);
       
       // Handle specific error cases
-      if (err.name === 'NotAllowedError') {
+      if (error.name === 'NotAllowedError') {
         setError('NFC toegang geweigerd. Geef toestemming in de browser en probeer opnieuw.');
-      } else if (err.name === 'NotSupportedError') {
+      } else if (error.name === 'NotSupportedError') {
         setError('NFC wordt niet ondersteund op dit apparaat.');
-      } else if (err.message && err.message.includes('not supported')) {
-        setError('NFC wordt niet ondersteund. Zorg dat NFC is ingeschakeld in de apparaat instellingen.');
       } else {
-        setError(err.message || 'Fout bij het starten van NFC scan. Controleer of NFC is ingeschakeld.');
+        setError('NFC scannen mislukt. Zorg dat NFC is ingeschakeld in de apparaat instellingen en probeer opnieuw.');
       }
       
       setIsScanning(false);
@@ -185,8 +183,8 @@ export default function Home() {
         {/* Error Message */}
         {error && (
           <div className="mb-6 p-4 bg-[var(--error)] rounded-lg text-white">
-            <p className="font-semibold text-center mb-2">⚠️ {error}</p>
-            {error.includes('ingeschakeld') && (
+            <p className="font-semibold text-center mb-2">{error}</p>
+            {(error.includes('ingeschakeld') || error.includes('mislukt')) && (
               <div className="text-sm mt-3 p-3 bg-white/10 rounded">
                 <p className="font-semibold mb-2">Controleer de volgende stappen:</p>
                 <ol className="list-decimal list-inside space-y-1 text-left">
