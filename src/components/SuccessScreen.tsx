@@ -28,8 +28,11 @@ export default function SuccessScreen({ isCheckout, activeScan, onBack, onScanRe
       ndefReaderRef.current = null;
     }
 
+    // Wait 3 seconds before enabling NFC
     timerRef.current = setTimeout(() => {
+      console.log('3 seconds passed - activating NFC scanner');
       setNfcReady(true);
+      // Start scanning only after setting ready state
       if (onScanReady) {
         startNFCScanning();
       }
@@ -148,17 +151,21 @@ export default function SuccessScreen({ isCheckout, activeScan, onBack, onScanRe
   return (
     <div className="card text-center animate-fade-in">
       <div className="mb-6">
-        <div className="inline-flex items-center justify-center w-32 h-32 bg-[var(--success)] rounded-full mb-6">
+        <div className={`inline-flex items-center justify-center w-32 h-32 rounded-full mb-6 ${
+          isCheckout ? 'bg-red-600' : 'bg-green-600'
+        }`}>
           <CheckCircle className="w-16 h-16 text-white" />
         </div>
         
-        <h2 className="text-3xl font-bold mb-4">
-          {isCheckout ? 'Uitgecheckt!' : 'Ingecheckt!'}
+        <h2 className={`text-3xl font-bold mb-4 ${
+          isCheckout ? 'text-red-400' : 'text-green-400'
+        }`}>
+          {isCheckout ? '🚪 Uitgecheckt!' : '✅ Ingecheckt!'}
         </h2>
         <p className="text-lg text-white/80 mb-4">
           {isCheckout 
-            ? 'De gast is succesvol uitgecheckt'
-            : 'De gegevens zijn succesvol opgeslagen'}
+            ? 'De gast heeft het zwembad verlaten'
+            : 'De gast is succesvol ingecheckt'}
         </p>
 
         {activeScan && (

@@ -79,6 +79,9 @@ export default function Home() {
         // Check-in flow - AUTOMATICALLY go to guest type selection
         setIsCheckingOut(false);
         setActiveScan(null);
+        // ALWAYS reset visitor counts for new check-in
+        setAdults(0);
+        setChildren(0);
         setStep('guest-type');
       }
     } catch (err: any) {
