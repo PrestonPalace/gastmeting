@@ -30,12 +30,6 @@ export default function Home() {
     setIsScanning(true);
 
     try {
-      // Check if NFC is supported, but don't stop execution
-      if (!('NDEFReader' in window)) {
-        setError('NFC wordt niet ondersteund op dit apparaat. Gebruik Chrome of Edge op Android.');
-        setIsScanning(false);
-        return;
-      }
 
       // @ts-ignore - NDEFReader is not in TypeScript definitions yet
       const ndef = new window.NDEFReader();
