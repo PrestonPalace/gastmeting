@@ -164,8 +164,7 @@ class SyncManager {
 
   /**
    * Fetch latest data from server and update local cache
-   * Only updates if queue is empty to avoid overwriting pending changes
-   * Applies cleanup logic to ensure only ONE active session per tag
+   * CRITICAL: Merges with local data instead of blindly trusting server
    */
   private async fetchServerData(): Promise<void> {
     console.log('📥 Fetching latest data from server...');
@@ -177,16 +176,23 @@ class SyncManager {
       return;
     }
     
+    // Get current local state BEFORE fetching from server
+    const localScans = await db.getAllScans();
+    const localMap = new Map(localScans.map(s => [s.id, s]));
+    
     const response = await this.apiRequest('/api/scans', 'GET');
     const serverScans: Scan[] = response.scans || [];
     
-    console.log(`📥 Received ${serverScans.length} scans from server`);
+    console.log(`📥 Received ${serverScans.length} scans from server, have ${localScans.length} local scans`);
+    
+    // CRITICAL: Merge server data with local data intelligently
+    const mergedScans = this.mergeServerWithLocal(serverScans, localScans);
     
     // CLEANUP: Ensure only ONE active session per tag
-    const cleanedScans = this.cleanupDuplicateActiveSessions(serverScans);
+    const cleanedScans = this.cleanupDuplicateActiveSessions(mergedScans);
     
     if (cleanedScans.cleanupsNeeded.length > 0) {
-      console.warn(`🧹 Server data cleanup: Found ${cleanedScans.cleanupsNeeded.length} duplicate active sessions`);
+      console.warn(`🧹 Data cleanup: Found ${cleanedScans.cleanupsNeeded.length} duplicate active sessions`);
       
       // Send cleanup operations back to server
       for (const scan of cleanedScans.cleanupsNeeded) {
@@ -199,10 +205,60 @@ class SyncManager {
       }
     }
     
-    // Update local cache with cleaned data
+    // Update local cache with cleaned, merged data
     await db.saveScans(cleanedScans.scans);
     
-    console.log(`✅ Updated local cache with ${cleanedScans.scans.length} scans (${cleanedScans.cleanupsNeeded.length} duplicates cleaned)`);
+    console.log(`✅ Updated local cache with ${cleanedScans.scans.length} scans`);
+  }
+
+  /**
+   * Merge server data with local data - LOCAL WINS for newer/closed scans
+   */
+  private mergeServerWithLocal(serverScans: Scan[], localScans: Scan[]): Scan[] {
+    const localMap = new Map(localScans.map(s => [s.id, s]));
+    const mergedMap = new Map<string, Scan>();
+    
+    // Start with all local scans (they include latest changes)
+    for (const localScan of localScans) {
+      mergedMap.set(localScan.id, localScan);
+    }
+    
+    // Add/update with server scans, but LOCAL WINS if:
+    // 1. Local scan is closed (has endTime) - NEVER reopen
+    // 2. Local scan is newer - keep local version
+    for (const serverScan of serverScans) {
+      const localScan = localMap.get(serverScan.id);
+      
+      if (localScan) {
+        // Local version exists - decide which to keep
+        
+        // RULE 1: If local is closed, NEVER reopen from server
+        if (localScan.endTime && !serverScan.endTime) {
+          console.log(`🔒 PROTECTING closed session: ${localScan.id} - rejecting server version`);
+          continue; // Keep local closed version
+        }
+        
+        // RULE 2: If local has newer entryTime, keep local
+        const localTime = new Date(localScan.entryTime).getTime();
+        const serverTime = new Date(serverScan.entryTime).getTime();
+        if (localTime > serverTime) {
+          console.log(`🔄 Keeping newer local version: ${localScan.id}`);
+          continue; // Keep local version
+        }
+        
+        // RULE 3: If server has endTime but local doesn't, update local
+        if (!localScan.endTime && serverScan.endTime) {
+          console.log(`📥 Accepting server checkout: ${serverScan.id}`);
+          mergedMap.set(serverScan.id, serverScan);
+          continue;
+        }
+      }
+      
+      // New scan from server or server version is acceptable
+      mergedMap.set(serverScan.id, serverScan);
+    }
+    
+    return Array.from(mergedMap.values());
   }
 
   /**
