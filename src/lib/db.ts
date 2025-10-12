@@ -103,17 +103,16 @@ class IndexedDBService {
       const transaction = db.transaction(SCANS_STORE, 'readwrite');
       const store = transaction.objectStore(SCANS_STORE);
 
-      // Clear existing data
+      // Clear and replace - data is already cleaned by syncManager
       const clearRequest = store.clear();
       
       clearRequest.onsuccess = () => {
-        // Add all scans
-        let pending = scans.length;
-        if (pending === 0) {
+        if (scans.length === 0) {
           resolve();
           return;
         }
 
+        let pending = scans.length;
         scans.forEach(scan => {
           const request = store.put(scan);
           request.onsuccess = () => {

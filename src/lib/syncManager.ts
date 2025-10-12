@@ -165,6 +165,7 @@ class SyncManager {
   /**
    * Fetch latest data from server and update local cache
    * Only updates if queue is empty to avoid overwriting pending changes
+   * Applies cleanup logic to ensure only ONE active session per tag
    */
   private async fetchServerData(): Promise<void> {
     console.log('📥 Fetching latest data from server...');
@@ -177,12 +178,83 @@ class SyncManager {
     }
     
     const response = await this.apiRequest('/api/scans', 'GET');
-    const scans: Scan[] = response.scans || [];
+    const serverScans: Scan[] = response.scans || [];
     
-    // Update local cache with server data
-    await db.saveScans(scans);
+    console.log(`📥 Received ${serverScans.length} scans from server`);
     
-    console.log(`✅ Updated local cache with ${scans.length} scans`);
+    // CLEANUP: Ensure only ONE active session per tag
+    const cleanedScans = this.cleanupDuplicateActiveSessions(serverScans);
+    
+    if (cleanedScans.cleanupsNeeded.length > 0) {
+      console.warn(`🧹 Server data cleanup: Found ${cleanedScans.cleanupsNeeded.length} duplicate active sessions`);
+      
+      // Send cleanup operations back to server
+      for (const scan of cleanedScans.cleanupsNeeded) {
+        try {
+          await this.apiRequest(`/api/scans/${scan.id}`, 'PATCH', { endTime: scan.endTime });
+          console.log(`✅ Closed duplicate session on server: ${scan.id}`);
+        } catch (error) {
+          console.error(`❌ Failed to close duplicate on server: ${scan.id}`, error);
+        }
+      }
+    }
+    
+    // Update local cache with cleaned data
+    await db.saveScans(cleanedScans.scans);
+    
+    console.log(`✅ Updated local cache with ${cleanedScans.scans.length} scans (${cleanedScans.cleanupsNeeded.length} duplicates cleaned)`);
+  }
+
+  /**
+   * Clean up duplicate active sessions - keep only the most recent per tag
+   */
+  private cleanupDuplicateActiveSessions(scans: Scan[]): { scans: Scan[], cleanupsNeeded: Scan[] } {
+    const activeByTag = new Map<string, Scan[]>();
+    const closedScans: Scan[] = [];
+    const cleanupsNeeded: Scan[] = [];
+    
+    // Group active sessions by tagId
+    for (const scan of scans) {
+      if (scan.endTime) {
+        closedScans.push(scan);
+      } else {
+        const existing = activeByTag.get(scan.tagId) || [];
+        existing.push(scan);
+        activeByTag.set(scan.tagId, existing);
+      }
+    }
+    
+    // For each tag with multiple active sessions, keep only the most recent
+    const cleanedActiveScans: Scan[] = [];
+    for (const [tagId, activeSessions] of activeByTag.entries()) {
+      if (activeSessions.length === 1) {
+        cleanedActiveScans.push(activeSessions[0]);
+      } else {
+        // Sort by entryTime descending (most recent first)
+        const sorted = activeSessions.sort((a, b) => 
+          new Date(b.entryTime).getTime() - new Date(a.entryTime).getTime()
+        );
+        
+        // Keep the most recent
+        const [mostRecent, ...duplicates] = sorted;
+        cleanedActiveScans.push(mostRecent);
+        
+        console.warn(`⚠️ Tag ${tagId}: Keeping session ${mostRecent.id}, closing ${duplicates.length} duplicate(s)`);
+        
+        // Mark duplicates for closure
+        const now = new Date().toISOString();
+        for (const duplicate of duplicates) {
+          const closedDuplicate: Scan = { ...duplicate, endTime: now };
+          closedScans.push(closedDuplicate);
+          cleanupsNeeded.push(closedDuplicate);
+        }
+      }
+    }
+    
+    return {
+      scans: [...closedScans, ...cleanedActiveScans],
+      cleanupsNeeded
+    };
   }
 
   /**
