@@ -1,50 +1,72 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { CheckCircle, Users, Clock, User, Radio } from 'lucide-react';
+import { CheckCircle, Users, Clock, User, Radio, Scan as ScanIcon } from 'lucide-react';
 import type { Scan } from '@/types/scan';
 
 interface SuccessScreenProps {
   isCheckout: boolean;
   activeScan: Scan | null;
   onBack: () => void;
+  onScanReady?: (serialNumber: string) => void;
 }
 
-export default function SuccessScreen({ isCheckout, activeScan, onBack }: SuccessScreenProps) {
-  const [autoReturnCountdown, setAutoReturnCountdown] = useState(5);
-  const [shouldAutoReturn, setShouldAutoReturn] = useState(true);
+export default function SuccessScreen({ isCheckout, activeScan, onBack, onScanReady }: SuccessScreenProps) {
+  const [nfcReady, setNfcReady] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const lastScanTimeRef = useRef(Date.now());
+  const ndefReaderRef = useRef<any>(null);
 
-  // Reset timer when component mounts or when a new scan happens
+  // Activate NFC after 3 seconds
   useEffect(() => {
-    lastScanTimeRef.current = Date.now();
-    setAutoReturnCountdown(5);
-    setShouldAutoReturn(true);
-  }, [activeScan?.id]);
-
-  // Auto-return countdown (only if not manually navigated back)
-  useEffect(() => {
-    if (!shouldAutoReturn) return;
-
-    timerRef.current = setInterval(() => {
-      setAutoReturnCountdown((prev) => {
-        if (prev <= 1) {
-          onBack();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
+    timerRef.current = setTimeout(() => {
+      setNfcReady(true);
+      if (onScanReady) {
+        startNFCScanning();
+      }
+    }, 3000);
 
     return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
+      if (timerRef.current) clearTimeout(timerRef.current);
+      if (ndefReaderRef.current) {
+        // Cleanup NFC reader
+        ndefReaderRef.current = null;
+      }
     };
-  }, [shouldAutoReturn, onBack]);
+  }, [activeScan?.id]);
+
+  const startNFCScanning = async () => {
+    if (!('NDEFReader' in window)) {
+      return; // NFC not supported
+    }
+
+    setIsScanning(true);
+
+    try {
+      // @ts-ignore
+      const ndef = new window.NDEFReader();
+      ndefReaderRef.current = ndef;
+
+      ndef.addEventListener('reading', ({ serialNumber }: any) => {
+        console.log('Background NFC scan:', serialNumber);
+        setIsScanning(false);
+        if (onScanReady) {
+          onScanReady(serialNumber);
+        }
+      });
+
+      await ndef.scan();
+      console.log('Background NFC scanning active');
+    } catch (err) {
+      console.error('Background NFC scan failed:', err);
+      setIsScanning(false);
+    }
+  };
 
   const handleManualBack = () => {
-    setShouldAutoReturn(false); // Stop auto-return
-    if (timerRef.current) clearInterval(timerRef.current);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    setNfcReady(false);
+    setIsScanning(false);
     onBack();
   };
 
@@ -157,9 +179,28 @@ export default function SuccessScreen({ isCheckout, activeScan, onBack }: Succes
           </div>
         )}
 
-        <p className="text-sm text-white/60 mb-4">
-          Automatisch terug in {autoReturnCountdown} seconden...
-        </p>
+        {/* NFC Ready Indicator */}
+        {nfcReady && (
+          <div className="mb-4 p-4 bg-green-900/30 border-2 border-green-500 rounded-lg">
+            <div className="flex items-center justify-center gap-3">
+              <div className="relative">
+                <ScanIcon className="w-6 h-6 text-green-400" />
+                {isScanning && (
+                  <div className="absolute inset-0 rounded-full border-2 border-green-400/30 border-t-green-400 animate-spin"></div>
+                )}
+              </div>
+              <p className="text-green-200 font-semibold">
+                {isScanning ? 'Klaar voor volgende scan...' : 'Scan opnieuw actief'}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {!nfcReady && (
+          <p className="text-sm text-white/60 mb-4">
+            Scanner wordt actief in 3 seconden...
+          </p>
+        )}
 
         {/* Manual Back Button */}
         <button

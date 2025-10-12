@@ -61,7 +61,7 @@ export default function Home() {
   const handleCheckout = async (id: string) => {
     try {
       await ScanService.checkoutScan(id);
-      // Don't auto-return, let user manually go back or wait for 5 seconds after scan
+      // Success screen will stay, NFC will reactivate after 3 seconds
     } catch (err: any) {
       setError(err.message || 'Fout bij uitchecken');
     }
@@ -206,6 +206,7 @@ export default function Home() {
             isCheckout={isCheckingOut}
             activeScan={activeScan}
             onBack={() => resetFlow()}
+            onScanReady={handleNFCScan}
           />
         )}
       </div>
