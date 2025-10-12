@@ -16,43 +16,107 @@ This Next.js application is configured to deploy automatically on Coolify using 
 
 **⚠️ CRITICAL**: You MUST configure persistent storage for the JSON data file.
 
-In your Coolify dashboard:
+Choose one of these options:
 
-1. Navigate to your application
-2. Go to **"Storage"** tab
-3. Click **"+ Add"** to add a new volume
-4. Configure with these **EXACT** settings:
+##### Option A: File Mount (Most Reliable - Recommended)
 
-   ```
-   Volume Name: scan-data
-   Source Path: (leave empty - Coolify will create a volume)
-   Destination Path: /app/data
-   ```
+Mount the specific JSON file instead of the directory:
 
-   **OR** if using a bind mount:
-
-   ```
-   Volume Name: scan-data
-   Source Path: /data (or /var/lib/coolify/data/scans)
-   Destination Path: /app/data
+1. **On your Coolify server** (requires SSH access):
+   ```bash
+   sudo mkdir -p /var/lib/coolify/storage
+   sudo touch /var/lib/coolify/storage/riviera-scans.json
+   echo "[]" | sudo tee /var/lib/coolify/storage/riviera-scans.json
+   sudo chmod 666 /var/lib/coolify/storage/riviera-scans.json
    ```
 
-5. Click **Save**
-6. **Redeploy** the application
+2. **In Coolify dashboard**:
+   - Navigate to your application
+   - Go to **"Storage"** tab
+   - Click **"+ Add"**
+   - Configure:
+     ```
+     Name: scans-file
+     Source Path: /var/lib/coolify/storage/riviera-scans.json
+     Destination Path: /app/data/scans.json
+     Type: Bind Mount
+     Is Directory: NO (unchecked)
+     ```
+
+3. Click **Save** and **Redeploy**
+
+##### Option B: Directory Mount
+
+Mount the entire data directory (requires initialization):
+
+1. **In Coolify dashboard**:
+   - Navigate to your application
+   - Go to **"Storage"** tab
+   - Click **"+ Add"**
+   - Configure:
+     ```
+     Volume Name: scan-data
+     Source Path: (leave empty for Docker volume)
+     Destination Path: /app/data
+     Type: Volume
+     ```
+
+2. Click **Save** and **Redeploy**
+
+3. **Initialize storage** after deployment:
+   - Open your app in browser
+   - Press F12 (developer tools)
+   - Go to Console tab
+   - Run this:
+     ```javascript
+     fetch('/api/init', { method: 'POST' })
+       .then(r => r.json())
+       .then(console.log)
+     ```
+   - Should show `"success": true`
 
 **Important Notes:**
-- The destination path MUST be `/app/data` (not just `/data`)
-- This is where Next.js will write `scans.json` in production
-- The volume persists across deployments and container restarts
+- The destination path MUST be `/app/data` for directory mount
+- The destination path MUST be `/app/data/scans.json` for file mount
+- File mount is more reliable but requires SSH access
+- Directory mount works but needs initialization via `/api/init`
 
 #### 3. Verify Storage is Working
 
-After deployment, visit: `https://your-domain.com/api/debug`
+After deployment, check storage status:
 
-This will show you:
-- ✅ Directory exists and is writable
-- ✅ File permissions are correct
-- ✅ Number of scans stored
+1. **Visit the debug endpoint:**
+   ```
+   https://your-domain.com/api/debug
+   ```
+
+   Should show:
+   ```json
+   {
+     "directoryExists": true,
+     "fileExists": true,
+     "canWrite": true,
+     "scansCount": 0
+   }
+   ```
+
+2. **If using directory mount**, initialize if needed:
+   ```
+   POST https://your-domain.com/api/init
+   ```
+   
+   Browser console command:
+   ```javascript
+   fetch('/api/init', { method: 'POST' })
+     .then(r => r.json())
+     .then(data => console.log(data))
+   ```
+
+3. **Test persistence:**
+   - Scan an NFC tag
+   - Check `/api/scans` - should show your scan
+   - Restart the container in Coolify
+   - Check `/api/scans` again - data should still be there ✅
 - ✅ Last scan data
 
 If you see errors, check:

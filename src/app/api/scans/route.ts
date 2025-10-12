@@ -156,3 +156,16 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to update scan' }, { status: 500 });
   }
 }
+
+// DELETE - Clear all scans (admin function)
+export async function DELETE() {
+  try {
+    await ensureDataDir();
+    await writeScans([]);
+    console.log('All scans cleared');
+    return NextResponse.json({ success: true, message: 'All scans cleared' });
+  } catch (error) {
+    console.error('Error clearing scans:', error);
+    return NextResponse.json({ error: 'Failed to clear scans' }, { status: 500 });
+  }
+}
