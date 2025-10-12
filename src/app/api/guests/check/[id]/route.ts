@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GuestData, APIResponse } from '../../../../../types';
-import { getDb } from '../../../../../lib/mongodb';
+import { loadGuests } from '../../../../../lib/blobStore';
 
 export async function GET(
   request: NextRequest,
@@ -17,27 +17,23 @@ export async function GET(
       }, { status: 400 });
     }
 
-    const db = await getDb();
-    const collection = db.collection<GuestData>('guestEntries');
-
+    const guests = await loadGuests();
     // Active entry: most recent with no endTime
-    const activeEntry: any = await collection.findOne(
-      { id: decodedId, endTime: { $exists: false } },
-      { sort: { entryTime: -1 } }
-    );
+    const activeEntry = guests
+      .filter((g) => g.id === decodedId && !g.endTime)
+      .sort((a, b) => new Date(b.entryTime).getTime() - new Date(a.entryTime).getTime())[0];
 
     // Recent checkout within last 5 minutes
-    const fiveMinutesAgoIso = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-    const recentCheckout = await collection.findOne(
-      { id: decodedId, endTime: { $gt: fiveMinutesAgoIso } },
-      { sort: { endTime: -1 } }
-    );
+    const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+    const recentCheckout = guests
+      .filter((g) => g.id === decodedId && g.endTime && new Date(g.endTime).getTime() > fiveMinutesAgo)
+      .sort((a, b) => new Date(b.endTime!).getTime() - new Date(a.endTime!).getTime())[0];
 
     return NextResponse.json({
       success: true,
       isCheckout: !!activeEntry,
       recentCheckout: !!recentCheckout,
-      data: activeEntry ? { ...activeEntry, _id: undefined } : null
+      data: activeEntry ?? null
     });
 
   } catch (error) {

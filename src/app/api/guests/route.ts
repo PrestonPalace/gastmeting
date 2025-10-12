@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GuestData, APIResponse } from '../../../types';
-import { getDb } from '../../../lib/mongodb';
+import { loadGuests, saveGuests } from '../../../lib/blobStore';
 
 export async function POST(request: NextRequest): Promise<NextResponse<APIResponse>> {
   try {
@@ -15,13 +15,12 @@ export async function POST(request: NextRequest): Promise<NextResponse<APIRespon
     }
 
     if (action === 'checkout') {
-      const db = await getDb();
-      const collection = db.collection<GuestData>('guestEntries');
-      // Find the most recent entry without an endTime
-      const activeEntry: any = await collection.findOne(
-        { id, endTime: { $exists: false } },
-        { sort: { entryTime: -1 } }
-      );
+      const guests = await loadGuests();
+      // Find the most recent entry without an endTime for this id
+      const candidates = guests
+        .filter((g) => g.id === id && !g.endTime)
+        .sort((a, b) => new Date(b.entryTime).getTime() - new Date(a.entryTime).getTime());
+      const activeEntry = candidates[0];
 
       if (!activeEntry) {
         return NextResponse.json({
@@ -30,14 +29,18 @@ export async function POST(request: NextRequest): Promise<NextResponse<APIRespon
         }, { status: 404 });
       }
 
-      // Update the entry with endTime
       const endTime = new Date().toISOString();
-      await collection.updateOne({ _id: activeEntry._id }, { $set: { endTime } });
+      const duration = Math.max(0, new Date(endTime).getTime() - new Date(activeEntry.entryTime).getTime());
+      // Update the in-memory record
+      const updatedGuests = guests.map((g) => (
+        g === activeEntry ? { ...g, endTime, duration } : g
+      ));
+      await saveGuests(updatedGuests);
 
       return NextResponse.json({
         success: true,
         message: 'Guest checked out successfully',
-        data: { ...activeEntry, endTime }
+        data: { ...activeEntry, endTime, duration }
       });
 
     } else if (action === 'checkin') {
@@ -49,9 +52,6 @@ export async function POST(request: NextRequest): Promise<NextResponse<APIRespon
         }, { status: 400 });
       }
 
-      const db = await getDb();
-      const collection = db.collection<GuestData>('guestEntries');
-
       const newGuest: GuestData = {
         id,
         type,
@@ -60,7 +60,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<APIRespon
         entryTime: new Date().toISOString(),
       };
 
-      await collection.insertOne(newGuest as any);
+      const guests = await loadGuests();
+      guests.push(newGuest);
+      await saveGuests(guests);
 
       return NextResponse.json({
         success: true,
@@ -85,14 +87,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<APIRespon
 
 export async function GET(): Promise<NextResponse<APIResponse>> {
   try {
-    const db = await getDb();
-    const collection = db.collection<GuestData>('guestEntries');
-    const docs = await collection.find({}).sort({ entryTime: -1 }).toArray();
-    // Strip _id for API response to align with GuestData type
-    const guests: GuestData[] = docs.map((doc: any) => {
-      const { _id, ...rest } = doc;
-      return rest as GuestData;
-    });
+    const guests = await loadGuests();
+    guests.sort((a, b) => new Date(b.entryTime).getTime() - new Date(a.entryTime).getTime());
     return NextResponse.json({
       success: true,
       data: guests
