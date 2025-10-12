@@ -23,4 +23,6 @@ export interface APIResponse<T = any> {
   message?: string;
   isCheckout?: boolean;
   recentCheckout?: boolean;
+  persisted?: boolean; // indicates the write was verified via cache-busted read
+  source?: 'blob' | 'local';
 }

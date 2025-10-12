@@ -36,11 +36,16 @@ export async function POST(request: NextRequest): Promise<NextResponse<APIRespon
         g === activeEntry ? { ...g, endTime, duration } : g
       ));
       await saveGuests(updatedGuests);
+      // Verify with a cache-busted read
+      const verified = (await loadGuests({ bust: true }))
+        .some((g) => g.id === id && g.endTime === endTime);
 
       return NextResponse.json({
         success: true,
         message: 'Guest checked out successfully',
-        data: { ...activeEntry, endTime, duration }
+        data: { ...activeEntry, endTime, duration },
+        persisted: verified,
+        source: 'blob'
       });
 
     } else if (action === 'checkin') {
@@ -63,11 +68,16 @@ export async function POST(request: NextRequest): Promise<NextResponse<APIRespon
       const guests = await loadGuests();
       guests.push(newGuest);
       await saveGuests(guests);
+      // Verify with a cache-busted read
+      const verified = (await loadGuests({ bust: true }))
+        .some((g) => g.id === id && g.entryTime === newGuest.entryTime);
 
       return NextResponse.json({
         success: true,
         message: 'Guest checked in successfully',
-        data: newGuest
+        data: newGuest,
+        persisted: verified,
+        source: 'blob'
       });
     }
 

@@ -17,7 +17,9 @@ export async function GET(
       }, { status: 400 });
     }
 
-    const guests = await loadGuests();
+  const { searchParams } = new URL(request.url);
+  const force = searchParams.get('force') === '1';
+  const guests = await loadGuests({ bust: force });
     // Active entry: most recent with no endTime
     const activeEntry = guests
       .filter((g) => g.id === decodedId && !g.endTime)
@@ -33,7 +35,8 @@ export async function GET(
       success: true,
       isCheckout: !!activeEntry,
       recentCheckout: !!recentCheckout,
-      data: activeEntry ?? null
+      data: activeEntry ?? null,
+      source: 'blob'
     });
 
   } catch (error) {

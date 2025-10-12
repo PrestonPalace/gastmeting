@@ -63,7 +63,7 @@ export default function NFCScanner({ onNFCScanned }: NFCScannerProps) {
   const checkExistingGuest = async (id: string) => {
     try {
       // Check if guest already exists and needs checkout
-      const response = await fetch(`/api/guests/check/${encodeURIComponent(id)}`);
+  const response = await fetch(`/api/guests/check/${encodeURIComponent(id)}?force=1`);
       const data = await response.json();
       
       onNFCScanned(id, data.isCheckout);

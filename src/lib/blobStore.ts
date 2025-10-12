@@ -3,11 +3,12 @@ import type { GuestData } from '../types';
 
 const BLOB_PATHNAME = 'guest-entries.json';
 
-export async function loadGuests(): Promise<GuestData[]> {
+export async function loadGuests(opts?: { bust?: boolean }): Promise<GuestData[]> {
   try {
     // Check if the blob exists and get its URL
     const details = await head(BLOB_PATHNAME);
-    const res = await fetch(details.url, { cache: 'no-store' });
+    const url = opts?.bust ? `${details.url}?v=${Date.now()}` : details.url;
+    const res = await fetch(url, { cache: 'no-store' });
     if (!res.ok) return [];
     const data = (await res.json()) as unknown;
     if (Array.isArray(data)) return data as GuestData[];

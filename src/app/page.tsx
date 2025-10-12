@@ -7,6 +7,7 @@ import GuestTypeSelector from '../components/GuestTypeSelector';
 import GuestCountSelector from '../components/GuestCountSelector';
 import CompletionScreen from '../components/CompletionScreen';
 import { GuestType, GuestData } from '../types';
+import { upsertLocalEntry, markLocalCheckout, hasActiveLocal } from '../lib/localStore';
 
 type Step = 'scan' | 'type' | 'count' | 'complete';
 
@@ -17,6 +18,7 @@ export default function Home() {
   const [adults, setAdults] = useState<number>(1);
   const [children, setChildren] = useState<number>(0);
   const [isExistingGuest, setIsExistingGuest] = useState<boolean>(false);
+  const [warning, setWarning] = useState<string>('');
 
   const handleNFCScanned = (id: string, isCheckout: boolean = false) => {
     setNfcId(id);
@@ -45,6 +47,17 @@ export default function Home() {
       });
       
       if (response.ok) {
+        const res = await response.json();
+        // Update local storage to mark checkout
+        const endTime = res?.data?.endTime ?? new Date().toISOString();
+        const duration = res?.data?.duration;
+        markLocalCheckout(id, endTime, duration);
+        // Verify server has active=false using forced check
+        const verify = await fetch(`/api/guests/check/${encodeURIComponent(id)}?force=1`);
+        const verifyJson = await verify.json();
+        if (verifyJson?.isCheckout) {
+          setWarning('Server still shows active after checkout. Please rescan or check connectivity.');
+        }
         setCurrentStep('complete');
       }
     } catch (error) {
@@ -82,6 +95,18 @@ export default function Home() {
       });
 
       if (response.ok) {
+        const res = await response.json();
+        // Optimistically add to local storage
+        const entryTime = res?.data?.entryTime ?? new Date().toISOString();
+        upsertLocalEntry({ ...guestData, entryTime });
+        // Verify server acknowledges active using forced check
+        const verify = await fetch(`/api/guests/check/${encodeURIComponent(nfcId)}?force=1`);
+        const verifyJson = await verify.json();
+        const serverActive = !!verifyJson?.isCheckout;
+        const localActive = hasActiveLocal(nfcId);
+        if (localActive && !serverActive) {
+          setWarning('Gegevens lokaal opgeslagen maar niet bevestigd door server. Controleer internet en probeer opnieuw.');
+        }
         setCurrentStep('complete');
       }
     } catch (error) {
@@ -96,6 +121,7 @@ export default function Home() {
     setAdults(1);
     setChildren(0);
     setIsExistingGuest(false);
+    setWarning('');
   };
 
   const slideVariants = {
@@ -140,6 +166,11 @@ export default function Home() {
         </motion.div>
 
         <div className="relative overflow-hidden rounded-2xl glass-effect min-h-[500px]">
+          {warning && (
+            <div className="absolute top-0 left-0 right-0 bg-yellow-500/80 text-black text-center p-2 z-10">
+              {warning}
+            </div>
+          )}
           <AnimatePresence mode="wait" custom={getStepDirection(currentStep)}>
             {currentStep === 'scan' && (
               <motion.div
