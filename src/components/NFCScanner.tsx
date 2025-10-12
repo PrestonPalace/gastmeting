@@ -7,9 +7,11 @@ import { NFCReader } from '@/lib/nfc';
 interface NFCScannerProps {
   onScanSuccess: (serialNumber: string) => void;
   onScanError?: (error: string) => void;
+  currentId?: string;
+  onContinue?: () => void;
 }
 
-export default function NFCScanner({ onScanSuccess, onScanError }: NFCScannerProps) {
+export default function NFCScanner({ onScanSuccess, onScanError, currentId, onContinue }: NFCScannerProps) {
   const [isScanning, setIsScanning] = useState(false);
   const [error, setError] = useState<string>('');
 
@@ -119,6 +121,21 @@ export default function NFCScanner({ onScanSuccess, onScanError }: NFCScannerPro
       >
         {isScanning ? 'Scannen...' : 'Start Scan'}
       </button>
+
+      {/* Show current ID and continue button if scanned */}
+      {currentId && !isScanning && (
+        <div className="mt-6 p-4 bg-green-900/30 border border-green-500 rounded-lg">
+          <p className="text-green-200 mb-3">
+            ✓ Tag gescand: <span className="font-mono font-bold">{currentId}</span>
+          </p>
+          <button
+            onClick={onContinue}
+            className="btn-primary w-full bg-green-600 hover:bg-green-700"
+          >
+            Doorgaan →
+          </button>
+        </div>
+      )}
     </div>
   );
 }
