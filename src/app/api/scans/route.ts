@@ -67,17 +67,21 @@ async function writeScans(scans: Scan[]) {
   }
 }
 
-// GET - Retrieve all scans or a specific scan by ID
+// GET - Retrieve all scans or find active scan by tag ID
 export async function GET(request: NextRequest) {
   try {
     const scans = await readScans();
     const { searchParams } = new URL(request.url);
-    const id = searchParams.get('id');
+    const tagId = searchParams.get('tagId');
 
-    if (id) {
-      const scan = scans.find((s: Scan) => s.id === id && !s.endTime);
-      if (scan) {
-        return NextResponse.json(scan);
+    if (tagId) {
+      // Find the most recent active scan for this tag
+      const activeScans = scans
+        .filter((s: Scan) => s.tagId === tagId && !s.endTime)
+        .sort((a: Scan, b: Scan) => new Date(b.entryTime).getTime() - new Date(a.entryTime).getTime());
+      
+      if (activeScans.length > 0) {
+        return NextResponse.json(activeScans[0]);
       }
       return NextResponse.json({ error: 'Active scan not found' }, { status: 404 });
     }
@@ -89,37 +93,38 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST - Create a new scan entry
+// POST - Create a new scan entry (session already has unique ID from client)
 export async function POST(request: NextRequest) {
   try {
-    const body: ScanRequest = await request.json();
-    const { id, type, adults, children } = body;
+    const body = await request.json();
+    const { id, tagId, type, adults, children, entryTime } = body;
 
-    if (!id || !type || adults === undefined || children === undefined) {
+    if (!id || !tagId || !type || adults === undefined || children === undefined) {
       return NextResponse.json(
-        { error: 'Missing required fields: id, type, adults, children' },
+        { error: 'Missing required fields: id, tagId, type, adults, children' },
         { status: 400 }
       );
     }
 
     const scans = await readScans();
 
-    // Check if there's an active scan (no endTime) for this ID
-    const activeScan = scans.find((s: Scan) => s.id === id && !s.endTime);
+    // Check if this exact session ID already exists
+    const existingScan = scans.find((s: Scan) => s.id === id);
 
-    if (activeScan) {
+    if (existingScan) {
       return NextResponse.json(
-        { error: 'Active scan already exists for this ID', scan: activeScan },
+        { error: 'Scan with this session ID already exists', scan: existingScan },
         { status: 400 }
       );
     }
 
     const newScan: Scan = {
       id,
+      tagId,
       type,
       adults: Number(adults),
       children: Number(children),
-      entryTime: new Date().toISOString(),
+      entryTime: entryTime || new Date().toISOString(),
       endTime: null,
     };
 
@@ -133,29 +138,42 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// PATCH - Update scan with exit time
+// PATCH - Update scan session with exit time (checkout by session ID or tag ID)
 export async function PATCH(request: NextRequest) {
   try {
-    const body: CheckoutRequest = await request.json();
-    const { id } = body;
+    const body = await request.json();
+    const { id, tagId, endTime } = body;
 
-    if (!id) {
-      return NextResponse.json({ error: 'Missing required field: id' }, { status: 400 });
+    if (!id && !tagId) {
+      return NextResponse.json({ error: 'Missing required field: id or tagId' }, { status: 400 });
     }
 
     const scans = await readScans();
+    let scanIndex = -1;
 
-    // Find the active scan (no endTime) for this ID
-    const scanIndex = scans.findIndex((s: Scan) => s.id === id && !s.endTime);
+    if (id) {
+      // Find by session ID
+      scanIndex = scans.findIndex((s: Scan) => s.id === id);
+    } else if (tagId) {
+      // Find the most recent active scan for this tag
+      const activeScans = scans
+        .map((s, idx) => ({ scan: s, index: idx }))
+        .filter(({ scan }) => scan.tagId === tagId && !scan.endTime)
+        .sort(({ scan: a }, { scan: b }) => new Date(b.entryTime).getTime() - new Date(a.entryTime).getTime());
+      
+      if (activeScans.length > 0) {
+        scanIndex = activeScans[0].index;
+      }
+    }
 
     if (scanIndex === -1) {
       return NextResponse.json(
-        { error: 'No active scan found for this ID' },
+        { error: 'No active scan found' },
         { status: 404 }
       );
     }
 
-    scans[scanIndex].endTime = new Date().toISOString();
+    scans[scanIndex].endTime = endTime || new Date().toISOString();
     await writeScans(scans);
 
     return NextResponse.json(scans[scanIndex]);

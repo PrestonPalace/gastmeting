@@ -67,14 +67,19 @@ export class ScanService {
   }
 
   /**
-   * Get a specific scan by ID (from local cache)
+   * Get the most recent active scan for a tag ID
    */
-  static async getScanById(id: string): Promise<Scan | null> {
+  static async getActiveScanByTagId(tagId: string): Promise<Scan | null> {
     await this.ensureInitialized();
     
     try {
-      const scan = await db.getScan(id);
-      return scan;
+      const allScans = await db.getAllScans();
+      // Find the most recent scan for this tag that has no endTime
+      const activeScans = allScans
+        .filter(scan => scan.tagId === tagId && !scan.endTime)
+        .sort((a, b) => new Date(b.entryTime).getTime() - new Date(a.entryTime).getTime());
+      
+      return activeScans[0] || null;
     } catch (error) {
       console.error('Failed to get scan from cache:', error);
       return null;
@@ -82,21 +87,21 @@ export class ScanService {
   }
 
   /**
-   * Check if a scan is active (has no endTime)
+   * Check if a tag has an active scan session (no endTime)
    */
-  static async checkActiveScan(id: string): Promise<{ isActive: boolean; scan?: Scan }> {
+  static async checkActiveScan(tagId: string): Promise<{ isActive: boolean; scan?: Scan }> {
     await this.ensureInitialized();
     
     try {
-      const scan = await this.getScanById(id);
-      console.log(`🔍 Checking scan ${id}:`, scan ? `Found with endTime=${scan.endTime}` : 'Not found');
+      const scan = await this.getActiveScanByTagId(tagId);
+      console.log(`🔍 Checking tag ${tagId}:`, scan ? `Found active session ${scan.id}` : 'No active session');
       
-      if (scan && !scan.endTime) {
-        console.log(`✅ Scan ${id} is ACTIVE (no endTime)`);
+      if (scan) {
+        console.log(`✅ Tag ${tagId} has ACTIVE session (no endTime)`);
         return { isActive: true, scan };
       }
       
-      console.log(`❌ Scan ${id} is NOT active (${scan ? 'has endTime' : 'not found'})`);
+      console.log(`❌ Tag ${tagId} has NO active session - will create new`);
       return { isActive: false };
     } catch (error) {
       console.error('Error checking active scan:', error);
@@ -105,19 +110,25 @@ export class ScanService {
   }
 
   /**
-   * Create a new scan (check-in) - Works offline
+   * Create a new scan session (check-in) - Works offline
    */
   static async createScan(data: ScanRequest): Promise<Scan> {
     await this.ensureInitialized();
     
+    // Generate unique session ID: tagId-timestamp
+    const sessionId = `${data.id}-${Date.now()}`;
+    
     const newScan: Scan = {
-      id: data.id,
+      id: sessionId,        // Unique session ID
+      tagId: data.id,       // NFC tag ID
       type: data.type,
       adults: data.adults,
       children: data.children,
       entryTime: new Date().toISOString(),
       endTime: null,
     };
+    
+    console.log(`📝 Creating new session: ${sessionId} for tag ${data.id}`);
 
     try {
       // Save to local cache immediately
@@ -150,17 +161,19 @@ export class ScanService {
   }
 
   /**
-   * Update scan with exit time (check-out) - Works offline
+   * Update scan session with exit time (check-out) - Works offline
    */
-  static async checkoutScan(id: string): Promise<Scan> {
+  static async checkoutScan(tagId: string): Promise<Scan> {
     await this.ensureInitialized();
     
     try {
-      // Get current scan from cache
-      const existingScan = await db.getScan(id);
+      // Get the active session for this tag
+      const existingScan = await this.getActiveScanByTagId(tagId);
       if (!existingScan) {
-        throw new Error('Scan not found');
+        throw new Error('No active session found for this tag');
       }
+      
+      console.log(`🚪 Checking out session: ${existingScan.id} for tag ${tagId}`);
 
       // Update with end time
       const updatedScan: Scan = {

@@ -202,13 +202,16 @@ export default function Home() {
                     allScans.map((scan, idx) => (
                       <div key={idx} className="text-xs bg-white/5 p-2 rounded">
                         <span className={scan.endTime ? 'text-gray-400' : 'text-green-400'}>
-                          {scan.id}
+                          Tag: {scan.tagId}
                         </span>
                         {' - '}
                         <span className="text-gray-300">
                           {scan.type} ({scan.adults}V + {scan.children}K)
                         </span>
                         {!scan.endTime && <span className="text-green-400 ml-2">● ACTIEF</span>}
+                        <div className="text-xs text-white/40 mt-1">
+                          Session: {scan.id}
+                        </div>
                       </div>
                     ))
                   )}

@@ -231,7 +231,12 @@ export default function SuccessScreen({
 
               <div className="pt-3 border-t border-white/20">
                 <p className="text-sm text-white/60">Tag ID</p>
-                <p className="font-mono text-sm">{activeScan.id}</p>
+                <p className="font-mono text-sm">{activeScan.tagId}</p>
+              </div>
+              
+              <div className="pt-2">
+                <p className="text-xs text-white/40">Session ID</p>
+                <p className="font-mono text-xs text-white/60">{activeScan.id}</p>
               </div>
             </div>
           </div>
