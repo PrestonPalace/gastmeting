@@ -39,3 +39,42 @@ export async function blobExists(): Promise<boolean> {
     return false;
   }
 }
+
+// Enforces: fetch latest -> delete file -> mutate -> recreate file -> verify
+export async function rewriteGuests(
+  mutate: (current: GuestData[]) => GuestData[],
+  verify?: (finalList: GuestData[]) => boolean | Promise<boolean>
+): Promise<{ guests: GuestData[]; verified: boolean } > {
+  // Fetch latest with cache-bust
+  const current = await loadGuests({ bust: true });
+  // Delete existing blob (ignore errors)
+  try { await del(BLOB_PATHNAME); } catch {}
+  // Mutate
+  const next = mutate(current);
+  // Recreate file
+  await put(BLOB_PATHNAME, JSON.stringify(next), {
+    access: 'public',
+    contentType: 'application/json',
+    addRandomSuffix: false,
+    cacheControlMaxAge: 60,
+  });
+  // Verify with small retry loop
+  let verified = false;
+  const attempts = 3;
+  for (let i = 0; i < attempts; i++) {
+    const latest = await loadGuests({ bust: true });
+    if (verify) {
+      // custom verify predicate
+      // eslint-disable-next-line no-await-in-loop
+      verified = await verify(latest);
+    } else {
+      // default: list length matches
+      verified = latest.length === next.length;
+    }
+    if (verified) break;
+    // small backoff
+    // eslint-disable-next-line no-await-in-loop
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  return { guests: next, verified };
+}

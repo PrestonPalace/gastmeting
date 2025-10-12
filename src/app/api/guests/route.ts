@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GuestData, APIResponse } from '../../../types';
-import { loadGuests, saveGuests } from '../../../lib/blobStore';
+import { loadGuests, rewriteGuests } from '../../../lib/blobStore';
 
 export async function POST(request: NextRequest): Promise<NextResponse<APIResponse>> {
   try {
@@ -31,14 +31,10 @@ export async function POST(request: NextRequest): Promise<NextResponse<APIRespon
 
       const endTime = new Date().toISOString();
       const duration = Math.max(0, new Date(endTime).getTime() - new Date(activeEntry.entryTime).getTime());
-      // Update the in-memory record
-      const updatedGuests = guests.map((g) => (
-        g === activeEntry ? { ...g, endTime, duration } : g
-      ));
-      await saveGuests(updatedGuests);
-      // Verify with a cache-busted read
-      const verified = (await loadGuests({ bust: true }))
-        .some((g) => g.id === id && g.endTime === endTime);
+      const { verified } = await rewriteGuests(
+        (current) => current.map((g) => (g.id === id && !g.endTime ? { ...g, endTime, duration } : g)),
+        (latest) => latest.some((g) => g.id === id && g.endTime === endTime)
+      );
 
       return NextResponse.json({
         success: true,
@@ -65,12 +61,14 @@ export async function POST(request: NextRequest): Promise<NextResponse<APIRespon
         entryTime: new Date().toISOString(),
       };
 
-      const guests = await loadGuests();
-      guests.push(newGuest);
-      await saveGuests(guests);
-      // Verify with a cache-busted read
-      const verified = (await loadGuests({ bust: true }))
-        .some((g) => g.id === id && g.entryTime === newGuest.entryTime);
+      const { verified } = await rewriteGuests(
+        (current) => {
+          const next = current.slice();
+          next.push(newGuest);
+          return next;
+        },
+        (latest) => latest.some((g) => g.id === id && g.entryTime === newGuest.entryTime)
+      );
 
       return NextResponse.json({
         success: true,
