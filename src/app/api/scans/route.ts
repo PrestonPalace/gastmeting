@@ -82,7 +82,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Active scan not found' }, { status: 404 });
     }
 
-    return NextResponse.json(scans);
+    // Return scans in expected format for sync manager
+    return NextResponse.json({ scans });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to read scans' }, { status: 500 });
   }

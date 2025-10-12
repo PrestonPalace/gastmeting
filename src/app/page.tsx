@@ -5,6 +5,7 @@ import NFCScanner from '@/components/NFCScanner';
 import GuestTypeSelector from '@/components/GuestTypeSelector';
 import VisitorCountForm from '@/components/VisitorCountForm';
 import SuccessScreen from '@/components/SuccessScreen';
+import SyncStatusBar from '@/components/SyncStatusBar';
 import { ScanService } from '@/lib/scanService';
 import type { GuestType, Scan } from '@/types/scan';
 
@@ -26,9 +27,17 @@ export default function Home() {
   const [allScans, setAllScans] = useState<Scan[]>([]);
   const [showDebug, setShowDebug] = useState(false);
 
+  // Initialize offline support
+  useEffect(() => {
+    ScanService.init().catch(err => {
+      console.error('Failed to initialize ScanService:', err);
+    });
+  }, []);
+
   // Load all scans for debugging
   useEffect(() => {
     loadScans();
+
   }, [step]); // Reload when step changes
 
   const loadScans = async () => {
@@ -156,6 +165,9 @@ export default function Home() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-6">
+      {/* Sync Status Bar */}
+      <SyncStatusBar />
+      
       <div className="w-full max-w-2xl">
         {/* Header */}
         <div className="text-center mb-8">
