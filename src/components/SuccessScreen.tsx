@@ -19,6 +19,15 @@ export default function SuccessScreen({ isCheckout, activeScan, onBack, onScanRe
 
   // Activate NFC after 3 seconds
   useEffect(() => {
+    // Reset state when component mounts with new scan
+    setNfcReady(false);
+    setIsScanning(false);
+    
+    // Clear any existing reader
+    if (ndefReaderRef.current) {
+      ndefReaderRef.current = null;
+    }
+
     timerRef.current = setTimeout(() => {
       setNfcReady(true);
       if (onScanReady) {
@@ -27,17 +36,32 @@ export default function SuccessScreen({ isCheckout, activeScan, onBack, onScanRe
     }, 3000);
 
     return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-      if (ndefReaderRef.current) {
-        // Cleanup NFC reader
-        ndefReaderRef.current = null;
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
       }
+      // Cleanup NFC reader on unmount
+      if (ndefReaderRef.current) {
+        try {
+          // Stop scanning if possible
+          ndefReaderRef.current = null;
+        } catch (err) {
+          console.error('Error cleaning up NFC reader:', err);
+        }
+      }
+      setNfcReady(false);
+      setIsScanning(false);
     };
   }, [activeScan?.id]);
 
   const startNFCScanning = async () => {
     if (!('NDEFReader' in window)) {
       return; // NFC not supported
+    }
+
+    // Double-check we're ready
+    if (!nfcReady) {
+      console.log('NFC scanning attempted before ready state');
+      return;
     }
 
     setIsScanning(true);
@@ -49,10 +73,18 @@ export default function SuccessScreen({ isCheckout, activeScan, onBack, onScanRe
 
       ndef.addEventListener('reading', ({ serialNumber }: any) => {
         console.log('Background NFC scan:', serialNumber);
-        setIsScanning(false);
-        if (onScanReady) {
+        
+        // Only process if we're still ready and scanning
+        if (nfcReady && isScanning && onScanReady) {
+          setIsScanning(false);
+          setNfcReady(false); // Disable immediately to prevent double scans
           onScanReady(serialNumber);
         }
+      });
+
+      ndef.addEventListener('readingerror', () => {
+        console.error('Background NFC read error');
+        setIsScanning(false);
       });
 
       await ndef.scan();
@@ -60,13 +92,25 @@ export default function SuccessScreen({ isCheckout, activeScan, onBack, onScanRe
     } catch (err) {
       console.error('Background NFC scan failed:', err);
       setIsScanning(false);
+      setNfcReady(false);
     }
   };
 
   const handleManualBack = () => {
-    if (timerRef.current) clearTimeout(timerRef.current);
+    // Stop everything
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+    }
+    
+    // Disable NFC scanning
     setNfcReady(false);
     setIsScanning(false);
+    
+    // Clear reader reference
+    if (ndefReaderRef.current) {
+      ndefReaderRef.current = null;
+    }
+    
     onBack();
   };
 

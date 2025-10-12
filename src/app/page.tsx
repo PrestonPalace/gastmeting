@@ -19,6 +19,7 @@ export default function Home() {
   const [error, setError] = useState<string>('');
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [activeScan, setActiveScan] = useState<Scan | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false); // Prevent double scans
   
   // Debugging state
   const [allScans, setAllScans] = useState<Scan[]>([]);
@@ -39,22 +40,52 @@ export default function Home() {
   };
 
   const handleNFCScan = async (serialNumber: string) => {
+    // Prevent processing if already processing or not on scan/success step
+    if (isProcessing) {
+      console.log('Already processing a scan, ignoring...');
+      return;
+    }
+
+    // Only allow scans from scan page or success page
+    if (step !== 'scan' && step !== 'success') {
+      console.log('Scan blocked - currently on step:', step);
+      return;
+    }
+
+    setIsProcessing(true);
+    
+    // Reset previous data when scanning new tag
+    if (step === 'success') {
+      // Coming from success screen - reset everything for new scan
+      setGuestType(null);
+      setAdults(0);
+      setChildren(0);
+      setError('');
+    }
+    
     setNfcId(serialNumber);
     
-    // Check if this is a checkout or check-in
-    const { isActive, scan } = await ScanService.checkActiveScan(serialNumber);
-    
-    if (isActive && scan) {
-      // Checkout flow - AUTOMATICALLY checkout
-      setIsCheckingOut(true);
-      setActiveScan(scan);
-      await handleCheckout(serialNumber);
-      setStep('success');
-    } else {
-      // Check-in flow - AUTOMATICALLY go to guest type selection
-      setIsCheckingOut(false);
-      setActiveScan(null);
-      setStep('guest-type');
+    try {
+      // Check if this is a checkout or check-in
+      const { isActive, scan } = await ScanService.checkActiveScan(serialNumber);
+      
+      if (isActive && scan) {
+        // Checkout flow - AUTOMATICALLY checkout
+        setIsCheckingOut(true);
+        setActiveScan(scan);
+        await handleCheckout(serialNumber);
+        setStep('success');
+      } else {
+        // Check-in flow - AUTOMATICALLY go to guest type selection
+        setIsCheckingOut(false);
+        setActiveScan(null);
+        setStep('guest-type');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Fout bij scannen');
+      setStep('scan');
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -103,6 +134,7 @@ export default function Home() {
     setError('');
     setIsCheckingOut(false);
     setActiveScan(null);
+    setIsProcessing(false); // Reset processing flag
   };
 
   return (
