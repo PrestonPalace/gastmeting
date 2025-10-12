@@ -6,10 +6,15 @@
 ## 📱 Eerste Keer Gebruiken
 
 ### Tablet Voorbereiding:
-1. ✅ Zorg dat NFC is ingeschakeld in tablet instellingen
-2. ✅ Open Chrome of Edge browser
-3. ✅ Ga naar de webapp URL (van IT afdeling ontvangen)
-4. ✅ Geef toestemming voor NFC wanneer gevraagd
+1. ✅ Open de Instellingen van uw apparaat
+2. ✅ Zoek naar "NFC" of "Verbonden apparaten" 
+3. ✅ Schakel NFC in (zet de schakelaar op AAN)
+4. ✅ Open Chrome of Edge browser
+5. ✅ Ga naar de webapp URL (van IT afdeling ontvangen)
+6. ✅ Druk op "Start Scan" - er verschijnt een toestemmingsverzoek
+7. ✅ Druk op "Toestaan" of "Allow" om NFC toegang te geven
+
+> **Let op**: U hoeft maar één keer toestemming te geven. Daarna werkt het automatisch.
 
 ---
 
@@ -48,15 +53,26 @@ Selecteer het juiste type:
 
 ## ❗ Problemen Oplossen
 
-### "NFC wordt niet ondersteund"
-- Controleer of NFC aan staat in tablet instellingen
-- Gebruik Chrome of Edge browser
-- Herstart de browser
+### "NFC wordt niet ondersteund" of "NFC ingeschakeld"
+**Oplossing:**
+1. Open **Instellingen** op uw tablet
+2. Zoek naar **"NFC"** of **"Verbonden apparaten"**
+3. Schakel **NFC** in (zet schakelaar op AAN)
+4. Ga terug naar de app en druk op "Start Scan"
+
+### "NFC toegang geweigerd"
+**Oplossing:**
+1. Druk opnieuw op **"Start Scan"**
+2. Er verschijnt een pop-up van de browser
+3. Druk op **"Toestaan"** of **"Allow"**
+4. Probeer opnieuw te scannen
 
 ### "Fout bij het lezen van de armband"
-- Houd de armband langer tegen de tablet
-- Probeer een andere positie
-- Controleer of de armband niet beschadigd is
+**Oplossing:**
+- Houd de armband **2-3 seconden** tegen de tablet
+- Probeer een **andere positie** (midden/boven op de tablet)
+- Controleer of de armband niet **beschadigd** is
+- Probeer de armband opnieuw te scannen
 
 ### Scan werkt niet
 - Druk op de **"Terug"** knop

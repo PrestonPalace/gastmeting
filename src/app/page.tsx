@@ -29,31 +29,49 @@ export default function Home() {
     setError('');
     setIsScanning(true);
 
+    // Check if NFC is supported
+    if (!('NDEFReader' in window)) {
+      setError('NFC wordt niet ondersteund op dit apparaat. Gebruik Chrome of Edge op Android.');
+      setIsScanning(false);
+      return;
+    }
+
     try {
-      if ('NDEFReader' in window) {
-        // @ts-ignore - NDEFReader is not in TypeScript definitions yet
-        const ndef = new NDEFReader();
-        await ndef.scan();
-
-        ndef.addEventListener('reading', ({ serialNumber }: any) => {
-          console.log('NFC tag detected:', serialNumber);
-          setNfcId(serialNumber);
-          setIsScanning(false);
-          setStep('check-status');
-          checkScanStatus(serialNumber);
-        });
-
-        ndef.addEventListener('readingerror', () => {
-          setError('Fout bij het lezen van de armband');
-          setIsScanning(false);
-        });
-      } else {
-        setError('NFC wordt niet ondersteund op dit apparaat');
+      // @ts-ignore - NDEFReader is not in TypeScript definitions yet
+      const ndef = new NDEFReader();
+      
+      // Set up event listeners before scanning
+      ndef.addEventListener('reading', ({ serialNumber }: any) => {
+        console.log('NFC tag detected:', serialNumber);
+        setNfcId(serialNumber);
         setIsScanning(false);
-      }
+        setStep('check-status');
+        checkScanStatus(serialNumber);
+      });
+
+      ndef.addEventListener('readingerror', () => {
+        setError('Fout bij het lezen van de armband. Probeer het opnieuw.');
+        setIsScanning(false);
+      });
+
+      // This will trigger the permission prompt if not already granted
+      await ndef.scan();
+      console.log('NFC scan started successfully');
+      
     } catch (err: any) {
       console.error('NFC Error:', err);
-      setError(err.message || 'Fout bij het starten van NFC scan');
+      
+      // Handle specific error cases
+      if (err.name === 'NotAllowedError') {
+        setError('NFC toegang geweigerd. Geef toestemming in de browser en probeer opnieuw.');
+      } else if (err.name === 'NotSupportedError') {
+        setError('NFC wordt niet ondersteund op dit apparaat.');
+      } else if (err.message && err.message.includes('not supported')) {
+        setError('NFC wordt niet ondersteund. Zorg dat NFC is ingeschakeld in de apparaat instellingen.');
+      } else {
+        setError(err.message || 'Fout bij het starten van NFC scan. Controleer of NFC is ingeschakeld.');
+      }
+      
       setIsScanning(false);
     }
   };
@@ -166,8 +184,24 @@ export default function Home() {
 
         {/* Error Message */}
         {error && (
-          <div className="mb-6 p-4 bg-[var(--error)] rounded-lg text-white text-center">
-            {error}
+          <div className="mb-6 p-4 bg-[var(--error)] rounded-lg text-white">
+            <p className="font-semibold text-center mb-2">⚠️ {error}</p>
+            {error.includes('ingeschakeld') && (
+              <div className="text-sm mt-3 p-3 bg-white/10 rounded">
+                <p className="font-semibold mb-2">Controleer de volgende stappen:</p>
+                <ol className="list-decimal list-inside space-y-1 text-left">
+                  <li>Open de Instellingen van uw apparaat</li>
+                  <li>Zoek naar "NFC" of "Verbonden apparaten"</li>
+                  <li>Schakel NFC in</li>
+                  <li>Kom terug naar deze app en probeer opnieuw</li>
+                </ol>
+              </div>
+            )}
+            {error.includes('toegang geweigerd') && (
+              <div className="text-sm mt-3 p-3 bg-white/10 rounded">
+                <p className="text-left">Druk opnieuw op "Start Scan" en geef toestemming wanneer de browser hierom vraagt.</p>
+              </div>
+            )}
           </div>
         )}
 
@@ -184,9 +218,16 @@ export default function Home() {
               <h2 className="text-3xl font-bold mb-4">
                 {isScanning ? 'Scanning...' : 'Scan NFC Armband'}
               </h2>
-              <p className="text-lg text-white/80">
-                Houd de armband tegen de scanner
+              <p className="text-lg text-white/80 mb-2">
+                {isScanning 
+                  ? 'Houd de armband tegen de scanner'
+                  : 'Druk op de knop om te beginnen'}
               </p>
+              {!isScanning && (
+                <p className="text-sm text-white/60">
+                  Zorg dat NFC is ingeschakeld op dit apparaat
+                </p>
+              )}
             </div>
             <button
               onClick={startNfcScan}
