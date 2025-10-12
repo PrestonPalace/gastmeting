@@ -45,15 +45,16 @@ export default function Home() {
     const { isActive, scan } = await ScanService.checkActiveScan(serialNumber);
     
     if (isActive && scan) {
-      // Checkout flow - store the active scan for display
+      // Checkout flow - AUTOMATICALLY checkout
       setIsCheckingOut(true);
       setActiveScan(scan);
-      setStep('success'); // Go directly to success/info screen
+      await handleCheckout(serialNumber);
+      setStep('success');
     } else {
-      // Check-in flow
+      // Check-in flow - AUTOMATICALLY go to guest type selection
       setIsCheckingOut(false);
       setActiveScan(null);
-      // Don't auto-advance, wait for user to click continue
+      setStep('guest-type');
     }
   };
 
@@ -174,8 +175,6 @@ export default function Home() {
           <NFCScanner 
             onScanSuccess={handleNFCScan}
             onScanError={setError}
-            currentId={nfcId}
-            onContinue={() => nfcId && setStep('guest-type')}
           />
         )}
 
@@ -206,7 +205,6 @@ export default function Home() {
           <SuccessScreen 
             isCheckout={isCheckingOut}
             activeScan={activeScan}
-            onCheckout={activeScan ? () => handleCheckout(activeScan.id) : undefined}
             onBack={() => resetFlow()}
           />
         )}

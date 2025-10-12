@@ -7,11 +7,10 @@ import type { Scan } from '@/types/scan';
 interface SuccessScreenProps {
   isCheckout: boolean;
   activeScan: Scan | null;
-  onCheckout?: () => void;
   onBack: () => void;
 }
 
-export default function SuccessScreen({ isCheckout, activeScan, onCheckout, onBack }: SuccessScreenProps) {
+export default function SuccessScreen({ isCheckout, activeScan, onBack }: SuccessScreenProps) {
   const [autoReturnCountdown, setAutoReturnCountdown] = useState(5);
   const [shouldAutoReturn, setShouldAutoReturn] = useState(true);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -47,13 +46,6 @@ export default function SuccessScreen({ isCheckout, activeScan, onCheckout, onBa
     setShouldAutoReturn(false); // Stop auto-return
     if (timerRef.current) clearInterval(timerRef.current);
     onBack();
-  };
-
-  const handleCheckout = async () => {
-    setShouldAutoReturn(false); // Stop auto-return during checkout
-    if (onCheckout) {
-      await onCheckout();
-    }
   };
 
   // Format guest type in Dutch
@@ -94,117 +86,85 @@ export default function SuccessScreen({ isCheckout, activeScan, onCheckout, onBa
           <CheckCircle className="w-16 h-16 text-white" />
         </div>
         
-        {/* If this is a checkout scan showing info */}
-        {activeScan && !activeScan.endTime && isCheckout ? (
-          <>
-            <h2 className="text-3xl font-bold mb-4 text-[var(--secondary)]">
-              Actieve scan gevonden
-            </h2>
-            <p className="text-lg text-white/80 mb-6">
-              Deze gast is momenteel ingecheckt
-            </p>
+        <h2 className="text-3xl font-bold mb-4">
+          {isCheckout ? 'Uitgecheckt!' : 'Ingecheckt!'}
+        </h2>
+        <p className="text-lg text-white/80 mb-4">
+          {isCheckout 
+            ? 'De gast is succesvol uitgecheckt'
+            : 'De gegevens zijn succesvol opgeslagen'}
+        </p>
 
-            {/* Scan Details */}
-            <div className="bg-white/10 rounded-lg p-6 mb-6 text-left">
-              <h3 className="font-bold text-lg mb-4 text-[var(--accent)]">Scan Informatie</h3>
-              
-              <div className="space-y-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-[var(--secondary)] rounded-full flex items-center justify-center">
-                    {activeScan.type === 'hotelgast' && <Users className="w-5 h-5" />}
-                    {activeScan.type === 'daggast' && <User className="w-5 h-5" />}
-                    {activeScan.type === 'zwembadgast' && <Radio className="w-5 h-5" />}
-                  </div>
-                  <div>
-                    <p className="text-sm text-white/60">Type</p>
-                    <p className="font-semibold">{getGuestTypeLabel(activeScan.type)}</p>
-                  </div>
+        {activeScan && (
+          <div className="bg-white/10 rounded-lg p-6 mb-4 text-left">
+            <h3 className="font-bold text-lg mb-4 text-[var(--accent)]">Scan Informatie</h3>
+            
+            <div className="space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-[var(--secondary)] rounded-full flex items-center justify-center">
+                  {activeScan.type === 'hotelgast' && <Users className="w-5 h-5" />}
+                  {activeScan.type === 'daggast' && <User className="w-5 h-5" />}
+                  {activeScan.type === 'zwembadgast' && <Radio className="w-5 h-5" />}
                 </div>
-
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-[var(--secondary)] rounded-full flex items-center justify-center">
-                    <Users className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-white/60">Aantal personen</p>
-                    <p className="font-semibold">
-                      {activeScan.adults} Volwassene{activeScan.adults !== 1 ? 'n' : ''} + {' '}
-                      {activeScan.children} Kind{activeScan.children !== 1 ? 'eren' : ''}
-                    </p>
-                  </div>
+                <div>
+                  <p className="text-sm text-white/60">Type</p>
+                  <p className="font-semibold">{getGuestTypeLabel(activeScan.type)}</p>
                 </div>
+              </div>
 
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-[var(--secondary)] rounded-full flex items-center justify-center">
-                    <Clock className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-white/60">Ingecheckt om</p>
-                    <p className="font-semibold">
-                      {formatTime(activeScan.entryTime)} - {formatDate(activeScan.entryTime)}
-                    </p>
-                  </div>
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-[var(--secondary)] rounded-full flex items-center justify-center">
+                  <Users className="w-5 h-5" />
                 </div>
+                <div>
+                  <p className="text-sm text-white/60">Aantal personen</p>
+                  <p className="font-semibold">
+                    {activeScan.adults} Volwassene{activeScan.adults !== 1 ? 'n' : ''} + {' '}
+                    {activeScan.children} Kind{activeScan.children !== 1 ? 'eren' : ''}
+                  </p>
+                </div>
+              </div>
 
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-[var(--secondary)] rounded-full flex items-center justify-center">
+                  <Clock className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className="text-sm text-white/60">Ingecheckt om</p>
+                  <p className="font-semibold">
+                    {formatTime(activeScan.entryTime)} - {formatDate(activeScan.entryTime)}
+                  </p>
+                </div>
+              </div>
+
+              {isCheckout && activeScan.endTime && (
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 bg-[var(--accent)] rounded-full flex items-center justify-center">
                     <Clock className="w-5 h-5" />
                   </div>
                   <div>
-                    <p className="text-sm text-white/60">Duur</p>
-                    <p className="font-semibold">{getDuration(activeScan.entryTime)}</p>
+                    <p className="text-sm text-white/60">Totale duur</p>
+                    <p className="font-semibold">{getDuration(activeScan.entryTime, activeScan.endTime)}</p>
                   </div>
                 </div>
+              )}
 
-                <div className="pt-3 border-t border-white/20">
-                  <p className="text-sm text-white/60">Tag ID</p>
-                  <p className="font-mono text-sm">{activeScan.id}</p>
-                </div>
+              <div className="pt-3 border-t border-white/20">
+                <p className="text-sm text-white/60">Tag ID</p>
+                <p className="font-mono text-sm">{activeScan.id}</p>
               </div>
             </div>
-
-            {/* Checkout Button */}
-            <button
-              onClick={handleCheckout}
-              className="btn-primary w-full bg-red-600 hover:bg-red-700 mb-4"
-            >
-              Uitchecken
-            </button>
-          </>
-        ) : (
-          <>
-            <h2 className="text-3xl font-bold mb-4">
-              {isCheckout ? 'Uitgecheckt!' : 'Ingecheckt!'}
-            </h2>
-            <p className="text-lg text-white/80 mb-4">
-              {isCheckout 
-                ? 'De gast is succesvol uitgecheckt'
-                : 'De gegevens zijn succesvol opgeslagen'}
-            </p>
-
-            {activeScan && (
-              <div className="bg-white/10 rounded-lg p-4 mb-4">
-                <p className="text-sm text-white/60 mb-1">Tag ID</p>
-                <p className="font-mono font-semibold">{activeScan.id}</p>
-                {isCheckout && activeScan.endTime && (
-                  <>
-                    <p className="text-sm text-white/60 mt-3 mb-1">Totale duur</p>
-                    <p className="font-semibold">{getDuration(activeScan.entryTime, activeScan.endTime)}</p>
-                  </>
-                )}
-              </div>
-            )}
-
-            <p className="text-sm text-white/60">
-              Automatisch terug in {autoReturnCountdown} seconden...
-            </p>
-          </>
+          </div>
         )}
+
+        <p className="text-sm text-white/60 mb-4">
+          Automatisch terug in {autoReturnCountdown} seconden...
+        </p>
 
         {/* Manual Back Button */}
         <button
           onClick={handleManualBack}
-          className="btn-secondary w-full mt-4"
+          className="btn-secondary w-full"
         >
           Terug naar scan
         </button>
