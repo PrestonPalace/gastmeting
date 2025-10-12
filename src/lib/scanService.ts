@@ -89,11 +89,17 @@ export class ScanService {
     
     try {
       const scan = await this.getScanById(id);
+      console.log(`🔍 Checking scan ${id}:`, scan ? `Found with endTime=${scan.endTime}` : 'Not found');
+      
       if (scan && !scan.endTime) {
+        console.log(`✅ Scan ${id} is ACTIVE (no endTime)`);
         return { isActive: true, scan };
       }
+      
+      console.log(`❌ Scan ${id} is NOT active (${scan ? 'has endTime' : 'not found'})`);
       return { isActive: false };
     } catch (error) {
+      console.error('Error checking active scan:', error);
       return { isActive: false };
     }
   }

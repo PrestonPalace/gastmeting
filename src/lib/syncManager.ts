@@ -126,9 +126,16 @@ class SyncManager {
           console.error(`🚫 Max retries reached for operation ${operation.id}, removing from queue`);
           await db.removeFromSyncQueue(operation.id);
         } else {
+          console.log(`🔄 Will retry operation ${operation.id} (attempt ${operation.retries}/${MAX_RETRIES})`);
           await db.updateSyncOperation(operation);
         }
       }
+    }
+    
+    // Double-check queue is empty after processing
+    const remainingQueue = await db.getSyncQueue();
+    if (remainingQueue.length > 0) {
+      console.log(`⚠️ ${remainingQueue.length} operations still in queue (failed or retrying)`);
     }
   }
 
@@ -157,9 +164,17 @@ class SyncManager {
 
   /**
    * Fetch latest data from server and update local cache
+   * Only updates if queue is empty to avoid overwriting pending changes
    */
   private async fetchServerData(): Promise<void> {
     console.log('📥 Fetching latest data from server...');
+    
+    // Check if there are still pending operations
+    const pendingQueue = await db.getSyncQueue();
+    if (pendingQueue.length > 0) {
+      console.log(`⚠️ Skipping server fetch - ${pendingQueue.length} operations still pending`);
+      return;
+    }
     
     const response = await this.apiRequest('/api/scans', 'GET');
     const scans: Scan[] = response.scans || [];
