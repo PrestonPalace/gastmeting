@@ -148,12 +148,10 @@ export default function Home() {
     setAdults(0);
     setChildren(0);
     setError('');
-    setIsProcessing(false);
-    setInteractionLocked(false);
-  };
     setIsCheckingOut(false);
     setActiveScan(null);
-    setIsProcessing(false); // Reset processing flag
+    setIsProcessing(false);
+    setInteractionLocked(false);
   };
 
   return (
