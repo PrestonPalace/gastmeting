@@ -88,12 +88,50 @@ export class ScanService {
 
   /**
    * Check if a tag has an active scan session (no endTime)
+   * Includes cleanup of duplicate active sessions
    */
   static async checkActiveScan(tagId: string): Promise<{ isActive: boolean; scan?: Scan }> {
     await this.ensureInitialized();
     
     try {
-      const scan = await this.getActiveScanByTagId(tagId);
+      // Get ALL active sessions for this tag
+      const allScans = await db.getAllScans();
+      const activeScans = allScans
+        .filter(scan => scan.tagId === tagId && !scan.endTime)
+        .sort((a, b) => new Date(b.entryTime).getTime() - new Date(a.entryTime).getTime());
+      
+      // If multiple active sessions exist, close all except the most recent
+      if (activeScans.length > 1) {
+        console.warn(`⚠️ Found ${activeScans.length} active sessions for tag ${tagId}. Cleaning up duplicates...`);
+        
+        // Keep the most recent, close the rest
+        const [mostRecent, ...duplicates] = activeScans;
+        
+        for (const duplicate of duplicates) {
+          console.log(`🧹 Auto-closing duplicate session: ${duplicate.id}`);
+          const closedScan: Scan = {
+            ...duplicate,
+            endTime: new Date().toISOString(),
+          };
+          await db.saveScan(closedScan);
+          
+          // Queue for sync
+          const operation: SyncOperation = {
+            id: `cleanup-${duplicate.id}-${Date.now()}`,
+            type: 'update',
+            scanId: duplicate.id,
+            data: { endTime: closedScan.endTime },
+            timestamp: Date.now(),
+            retries: 0,
+          };
+          await db.addToSyncQueue(operation);
+        }
+        
+        console.log(`✅ Kept most recent session: ${mostRecent.id}`);
+        return { isActive: true, scan: mostRecent };
+      }
+      
+      const scan = activeScans[0] || null;
       console.log(`🔍 Checking tag ${tagId}:`, scan ? `Found active session ${scan.id}` : 'No active session');
       
       if (scan) {
@@ -111,9 +149,41 @@ export class ScanService {
 
   /**
    * Create a new scan session (check-in) - Works offline
+   * Automatically closes any existing active sessions for this tag
    */
   static async createScan(data: ScanRequest): Promise<Scan> {
     await this.ensureInitialized();
+    
+    // PRE-CHECK: Close any existing active sessions for this tag
+    console.log(`🔍 Pre-check: Looking for active sessions for tag ${data.id}...`);
+    const allScans = await db.getAllScans();
+    const existingActiveSessions = allScans.filter(
+      scan => scan.tagId === data.id && !scan.endTime
+    );
+    
+    if (existingActiveSessions.length > 0) {
+      console.warn(`⚠️ Found ${existingActiveSessions.length} active session(s) for tag ${data.id}. Auto-closing before creating new session...`);
+      
+      for (const existingSession of existingActiveSessions) {
+        console.log(`🧹 Auto-closing existing session: ${existingSession.id}`);
+        const closedScan: Scan = {
+          ...existingSession,
+          endTime: new Date().toISOString(),
+        };
+        await db.saveScan(closedScan);
+        
+        // Queue for sync
+        const operation: SyncOperation = {
+          id: `auto-close-${existingSession.id}-${Date.now()}`,
+          type: 'update',
+          scanId: existingSession.id,
+          data: { endTime: closedScan.endTime },
+          timestamp: Date.now(),
+          retries: 0,
+        };
+        await db.addToSyncQueue(operation);
+      }
+    }
     
     // Generate unique session ID: tagId-timestamp
     const sessionId = `${data.id}-${Date.now()}`;
@@ -162,22 +232,55 @@ export class ScanService {
 
   /**
    * Update scan session with exit time (check-out) - Works offline
+   * Always checks out the most recent active session only
    */
   static async checkoutScan(tagId: string): Promise<Scan> {
     await this.ensureInitialized();
     
     try {
-      // Get the active session for this tag
-      const existingScan = await this.getActiveScanByTagId(tagId);
-      if (!existingScan) {
+      // PRE-CHECK: Get ALL active sessions for this tag and handle duplicates
+      const allScans = await db.getAllScans();
+      const activeScans = allScans
+        .filter(scan => scan.tagId === tagId && !scan.endTime)
+        .sort((a, b) => new Date(b.entryTime).getTime() - new Date(a.entryTime).getTime());
+      
+      if (activeScans.length === 0) {
         throw new Error('No active session found for this tag');
       }
       
-      console.log(`🚪 Checking out session: ${existingScan.id} for tag ${tagId}`);
+      // Get the most recent active session
+      const [mostRecentSession, ...olderSessions] = activeScans;
+      
+      // If there are duplicates, close them too (defensive cleanup)
+      if (olderSessions.length > 0) {
+        console.warn(`⚠️ Found ${olderSessions.length} older active session(s) for tag ${tagId}. Auto-closing them...`);
+        
+        for (const olderSession of olderSessions) {
+          console.log(`🧹 Auto-closing older session: ${olderSession.id}`);
+          const closedOlder: Scan = {
+            ...olderSession,
+            endTime: new Date().toISOString(),
+          };
+          await db.saveScan(closedOlder);
+          
+          // Queue for sync
+          const operation: SyncOperation = {
+            id: `cleanup-old-${olderSession.id}-${Date.now()}`,
+            type: 'update',
+            scanId: olderSession.id,
+            data: { endTime: closedOlder.endTime },
+            timestamp: Date.now(),
+            retries: 0,
+          };
+          await db.addToSyncQueue(operation);
+        }
+      }
+      
+      console.log(`🚪 Checking out most recent session: ${mostRecentSession.id} for tag ${tagId}`);
 
-      // Update with end time
+      // Update the most recent session with end time
       const updatedScan: Scan = {
-        ...existingScan,
+        ...mostRecentSession,
         endTime: new Date().toISOString(),
       };
 

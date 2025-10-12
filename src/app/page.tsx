@@ -191,29 +191,86 @@ export default function Home() {
             <h3 className="font-bold mb-2 text-accent">🐛 Debug Informatie</h3>
             <div className="space-y-1">
               <p><span className="text-secondary">Huidige scan ID:</span> {nfcId || '(geen)'}</p>
-              <p><span className="text-secondary">Totaal scans:</span> {allScans.length}</p>
-              <p><span className="text-secondary">Actieve scans:</span> {allScans.filter(s => !s.endTime).length}</p>
+              <p><span className="text-secondary">Totaal sessies:</span> {allScans.length}</p>
+              <p><span className="text-secondary">Actieve sessies:</span> {allScans.filter(s => !s.endTime).length}</p>
+              
+              {/* Check for duplicate active sessions per tag */}
+              {(() => {
+                const activeByTag = allScans
+                  .filter(s => !s.endTime)
+                  .reduce((acc, scan) => {
+                    if (!acc[scan.tagId]) acc[scan.tagId] = [];
+                    acc[scan.tagId].push(scan);
+                    return acc;
+                  }, {} as Record<string, Scan[]>);
+                
+                const duplicates = Object.entries(activeByTag).filter(([_, scans]) => scans.length > 1);
+                
+                return duplicates.length > 0 && (
+                  <div className="mt-2 p-2 bg-red-500/20 border border-red-500 rounded">
+                    <p className="text-red-400 font-bold">⚠️ WAARSCHUWING: Meerdere actieve sessies gedetecteerd!</p>
+                    {duplicates.map(([tagId, scans]) => (
+                      <div key={tagId} className="mt-1 text-xs">
+                        <span className="text-red-300">Tag {tagId}: {scans.length} actieve sessies</span>
+                        {scans.map(s => (
+                          <div key={s.id} className="ml-4 text-white/60">- Session: {s.id}</div>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+              
               <div className="mt-2">
-                <p className="text-secondary font-semibold">Opgeslagen IDs:</p>
-                <div className="max-h-32 overflow-y-auto mt-1 space-y-1">
+                <p className="text-secondary font-semibold">Sessies per Tag ID:</p>
+                <div className="max-h-40 overflow-y-auto mt-1 space-y-2">
                   {allScans.length === 0 ? (
                     <p className="text-gray-400 italic">Nog geen scans</p>
                   ) : (
-                    allScans.map((scan, idx) => (
-                      <div key={idx} className="text-xs bg-white/5 p-2 rounded">
-                        <span className={scan.endTime ? 'text-gray-400' : 'text-green-400'}>
-                          Tag: {scan.tagId}
-                        </span>
-                        {' - '}
-                        <span className="text-gray-300">
-                          {scan.type} ({scan.adults}V + {scan.children}K)
-                        </span>
-                        {!scan.endTime && <span className="text-green-400 ml-2">● ACTIEF</span>}
-                        <div className="text-xs text-white/40 mt-1">
-                          Session: {scan.id}
-                        </div>
-                      </div>
-                    ))
+                    (() => {
+                      // Group by tagId
+                      const grouped = allScans.reduce((acc, scan) => {
+                        if (!acc[scan.tagId]) acc[scan.tagId] = [];
+                        acc[scan.tagId].push(scan);
+                        return acc;
+                      }, {} as Record<string, Scan[]>);
+                      
+                      return Object.entries(grouped).map(([tagId, scans]) => {
+                        const activeCount = scans.filter(s => !s.endTime).length;
+                        const hasMultipleActive = activeCount > 1;
+                        
+                        return (
+                          <div key={tagId} className={`text-xs p-2 rounded ${hasMultipleActive ? 'bg-red-500/20 border border-red-500' : 'bg-white/5'}`}>
+                            <div className="font-semibold">
+                              <span className={activeCount > 0 ? 'text-green-400' : 'text-gray-400'}>
+                                Tag: {tagId}
+                              </span>
+                              <span className="text-white/60 ml-2">
+                                ({scans.length} sessie{scans.length !== 1 ? 's' : ''})
+                              </span>
+                              {activeCount > 0 && (
+                                <span className={`ml-2 ${hasMultipleActive ? 'text-red-400 font-bold' : 'text-green-400'}`}>
+                                  ● {activeCount} ACTIEF
+                                </span>
+                              )}
+                            </div>
+                            <div className="ml-2 mt-1 space-y-1">
+                              {scans
+                                .sort((a, b) => new Date(b.entryTime).getTime() - new Date(a.entryTime).getTime())
+                                .map((scan, idx) => (
+                                  <div key={scan.id} className={scan.endTime ? 'text-gray-500' : hasMultipleActive ? 'text-red-300' : 'text-white/80'}>
+                                    {idx + 1}. {scan.type} ({scan.adults}V + {scan.children}K)
+                                    {!scan.endTime ? ' [ACTIEF]' : ` [${new Date(scan.endTime).toLocaleTimeString('nl-NL')}]`}
+                                    <div className="text-white/30 text-xs ml-2">
+                                      {scan.id.substring(0, 30)}...
+                                    </div>
+                                  </div>
+                                ))}
+                            </div>
+                          </div>
+                        );
+                      });
+                    })()
                   )}
                 </div>
               </div>
