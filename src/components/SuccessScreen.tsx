@@ -9,9 +9,16 @@ interface SuccessScreenProps {
   activeScan: Scan | null;
   onBack: () => void;
   onScanReady?: (serialNumber: string) => void;
+  interactionLocked?: boolean;
 }
 
-export default function SuccessScreen({ isCheckout, activeScan, onBack, onScanReady }: SuccessScreenProps) {
+export default function SuccessScreen({ 
+  isCheckout, 
+  activeScan, 
+  onBack,
+  onScanReady,
+  interactionLocked = false
+}: SuccessScreenProps) {
   const [nfcReady, setNfcReady] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -61,9 +68,9 @@ export default function SuccessScreen({ isCheckout, activeScan, onBack, onScanRe
       return; // NFC not supported
     }
 
-    // Double-check we're ready
-    if (!nfcReady) {
-      console.log('NFC scanning attempted before ready state');
+    // Double-check we're ready and not locked
+    if (!nfcReady || interactionLocked) {
+      console.log('NFC scanning prevented - not ready or locked');
       return;
     }
 
@@ -231,7 +238,7 @@ export default function SuccessScreen({ isCheckout, activeScan, onBack, onScanRe
         )}
 
         {/* NFC Ready Indicator */}
-        {nfcReady && (
+        {nfcReady && !interactionLocked && (
           <div className="mb-4 p-4 bg-green-900/30 border-2 border-green-500 rounded-lg">
             <div className="flex items-center justify-center gap-3">
               <div className="relative">
@@ -247,19 +254,30 @@ export default function SuccessScreen({ isCheckout, activeScan, onBack, onScanRe
           </div>
         )}
 
-        {!nfcReady && (
+        {(!nfcReady || interactionLocked) && (
           <p className="text-sm text-white/60 mb-4">
-            Scanner wordt actief in 3 seconden...
+            {interactionLocked ? '⏳ Wacht 3 seconden...' : 'Scanner wordt actief in 3 seconden...'}
           </p>
         )}
 
         {/* Manual Back Button */}
         <button
           onClick={handleManualBack}
-          className="btn-secondary w-full"
+          disabled={interactionLocked}
+          className={`w-full ${
+            interactionLocked 
+              ? 'btn bg-gray-600 cursor-not-allowed opacity-50' 
+              : 'btn-secondary'
+          }`}
         >
-          Terug naar scan
+          {interactionLocked ? '⏳ Even wachten... (3s)' : 'Terug naar scan'}
         </button>
+        
+        {interactionLocked && (
+          <p className="text-sm text-yellow-400 mt-3">
+            Je kunt over een paar seconden verder...
+          </p>
+        )}
       </div>
     </div>
   );

@@ -20,6 +20,7 @@ export default function Home() {
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [activeScan, setActiveScan] = useState<Scan | null>(null);
   const [isProcessing, setIsProcessing] = useState(false); // Prevent double scans
+  const [interactionLocked, setInteractionLocked] = useState(false); // Prevent actions during 3-second delay
   
   // Debugging state
   const [allScans, setAllScans] = useState<Scan[]>([]);
@@ -40,6 +41,12 @@ export default function Home() {
   };
 
   const handleNFCScan = async (serialNumber: string) => {
+    // Block if interaction is locked (3-second delay)
+    if (interactionLocked) {
+      console.log('Scan blocked - interaction locked (3-second delay)');
+      return;
+    }
+    
     // Prevent processing if already processing or not on scan/success step
     if (isProcessing) {
       console.log('Already processing a scan, ignoring...');
@@ -74,6 +81,12 @@ export default function Home() {
         setIsCheckingOut(true);
         setActiveScan(scan);
         await handleCheckout(serialNumber);
+        // Lock interactions for 3 seconds
+        setInteractionLocked(true);
+        setTimeout(() => {
+          console.log('Interaction lock released');
+          setInteractionLocked(false);
+        }, 3000);
         setStep('success');
       } else {
         // Check-in flow - AUTOMATICALLY go to guest type selection
@@ -135,6 +148,9 @@ export default function Home() {
     setAdults(0);
     setChildren(0);
     setError('');
+    setIsProcessing(false);
+    setInteractionLocked(false);
+  };
     setIsCheckingOut(false);
     setActiveScan(null);
     setIsProcessing(false); // Reset processing flag
@@ -242,6 +258,7 @@ export default function Home() {
             activeScan={activeScan}
             onBack={() => resetFlow()}
             onScanReady={handleNFCScan}
+            interactionLocked={interactionLocked}
           />
         )}
       </div>
