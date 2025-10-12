@@ -3,15 +3,26 @@ import fs from 'fs/promises';
 import path from 'path';
 import type { Scan, ScanRequest, CheckoutRequest } from '@/types/scan';
 
-const DATA_FILE = path.join(process.cwd(), 'data', 'scans.json');
+// Use /app/data in production (Docker) or local data folder in development
+const DATA_DIR = process.env.NODE_ENV === 'production' 
+  ? '/app/data' 
+  : path.join(process.cwd(), 'data');
+
+const DATA_FILE = path.join(DATA_DIR, 'scans.json');
+
+console.log('Environment:', process.env.NODE_ENV);
+console.log('Data directory:', DATA_DIR);
+console.log('Data file path:', DATA_FILE);
 
 // Ensure data directory exists
 async function ensureDataDir() {
-  const dataDir = path.join(process.cwd(), 'data');
   try {
-    await fs.access(dataDir);
+    await fs.access(DATA_DIR);
+    console.log('Data directory exists:', DATA_DIR);
   } catch {
-    await fs.mkdir(dataDir, { recursive: true });
+    console.log('Creating data directory:', DATA_DIR);
+    await fs.mkdir(DATA_DIR, { recursive: true });
+    console.log('Data directory created successfully');
   }
 }
 
@@ -20,16 +31,33 @@ async function readScans(): Promise<Scan[]> {
   try {
     await ensureDataDir();
     const data = await fs.readFile(DATA_FILE, 'utf-8');
-    return JSON.parse(data);
-  } catch {
+    const scans = JSON.parse(data);
+    console.log(`Read ${scans.length} scans from file`);
+    return scans;
+  } catch (error: any) {
+    if (error.code === 'ENOENT') {
+      console.log('Scans file does not exist yet, returning empty array');
+      return [];
+    }
+    console.error('Error reading scans file:', error);
     return [];
   }
 }
 
 // Write scans to file
 async function writeScans(scans: Scan[]) {
-  await ensureDataDir();
-  await fs.writeFile(DATA_FILE, JSON.stringify(scans, null, 2), 'utf-8');
+  try {
+    await ensureDataDir();
+    await fs.writeFile(DATA_FILE, JSON.stringify(scans, null, 2), 'utf-8');
+    console.log(`Successfully wrote ${scans.length} scans to file:`, DATA_FILE);
+    
+    // Verify the write
+    const stats = await fs.stat(DATA_FILE);
+    console.log(`File size: ${stats.size} bytes, modified: ${stats.mtime}`);
+  } catch (error) {
+    console.error('Error writing scans file:', error);
+    throw error;
+  }
 }
 
 // GET - Retrieve all scans or a specific scan by ID

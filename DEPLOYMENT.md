@@ -19,14 +19,46 @@ This Next.js application is configured to deploy automatically on Coolify using 
 In your Coolify dashboard:
 
 1. Navigate to your application
-2. Go to **"Storage"** or **"Persistent Storage"** tab
-3. Add a new volume with these settings:
-   - **Name**: `scan-data`
-   - **Source Path**: `/data` (or any path you prefer on the host)
-   - **Destination Path**: `/app/data`
-   - **Mount Type**: Bind Mount or Volume
+2. Go to **"Storage"** tab
+3. Click **"+ Add"** to add a new volume
+4. Configure with these **EXACT** settings:
 
-This ensures that the `data/scans.json` file persists across deployments and container restarts.
+   ```
+   Volume Name: scan-data
+   Source Path: (leave empty - Coolify will create a volume)
+   Destination Path: /app/data
+   ```
+
+   **OR** if using a bind mount:
+
+   ```
+   Volume Name: scan-data
+   Source Path: /data (or /var/lib/coolify/data/scans)
+   Destination Path: /app/data
+   ```
+
+5. Click **Save**
+6. **Redeploy** the application
+
+**Important Notes:**
+- The destination path MUST be `/app/data` (not just `/data`)
+- This is where Next.js will write `scans.json` in production
+- The volume persists across deployments and container restarts
+
+#### 3. Verify Storage is Working
+
+After deployment, visit: `https://your-domain.com/api/debug`
+
+This will show you:
+- ✅ Directory exists and is writable
+- ✅ File permissions are correct
+- ✅ Number of scans stored
+- ✅ Last scan data
+
+If you see errors, check:
+- Volume is mounted at `/app/data`
+- Container has write permissions
+- Volume has sufficient disk space
 
 #### 3. Environment Variables
 
