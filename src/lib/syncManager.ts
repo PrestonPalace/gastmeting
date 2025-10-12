@@ -153,7 +153,10 @@ class SyncManager {
 
       case 'update':
         if (!data) throw new Error('No data for update operation');
-        await this.apiRequest(`/api/scans/${scanId}`, 'PATCH', data);
+        // CRITICAL FIX: API expects 'id' in the body, not in the URL
+        const updateData = { ...data, id: scanId };
+        console.log(`📤 Sending PATCH to server for session ${scanId}:`, updateData);
+        await this.apiRequest('/api/scans', 'PATCH', updateData);
         break;
 
       case 'delete':
