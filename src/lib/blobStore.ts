@@ -25,6 +25,7 @@ export async function saveGuests(guests: GuestData[]): Promise<void> {
   await put(BLOB_PATHNAME, body, {
     access: 'public',
     contentType: 'application/json',
+    addRandomSuffix: false,
     cacheControlMaxAge: 60, // keep updates reasonably fresh
   });
 }
