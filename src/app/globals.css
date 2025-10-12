@@ -1,8 +1,5 @@
 @import "tailwindcss";
 
-/* --------------- */
-/* Riviera Kleuren */
-/* --------------- */
 :root {
   --primary: #072B31;
   --primary-light: #0f3d45;
@@ -16,97 +13,46 @@
   --error-light: #f4846a;
   --skeleton: oklch(0.97 0 0);
   
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: var(--primary);
+  --foreground: #ffffff;
 }
 
-
-
-
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  min-height: 100vh;
 }
 
-/* -------------------- */
-/* Custom Animations    */
-/* -------------------- */
-
-@keyframes nfc-pulse {
-  0%, 100% { 
-    transform: scale(1);
-    opacity: 1;
+@layer utilities {
+  .btn-primary {
+    @apply bg-[var(--secondary)] hover:bg-[var(--secondary-light)] text-white font-semibold py-4 px-8 rounded-lg transition-all duration-200 shadow-lg hover:shadow-xl;
   }
-  50% { 
-    transform: scale(1.05);
-    opacity: 0.8;
+  
+  .btn-secondary {
+    @apply bg-[var(--accent)] hover:bg-[var(--accent-dark)] text-[var(--primary)] font-semibold py-4 px-8 rounded-lg transition-all duration-200 shadow-lg hover:shadow-xl;
   }
-}
 
-@keyframes slide-in-right {
-  from {
-    transform: translateX(100%);
-    opacity: 0;
+  .btn-back {
+    @apply bg-transparent hover:bg-[var(--primary-light)] text-white font-medium py-3 px-6 rounded-lg transition-all duration-200 border border-white/20;
   }
-  to {
-    transform: translateX(0);
-    opacity: 1;
+
+  .card {
+    @apply bg-[var(--primary-light)] rounded-xl p-8 shadow-lg;
   }
-}
 
-@keyframes slide-out-left {
-  from {
-    transform: translateX(0);
-    opacity: 1;
+  .guest-type-btn {
+    @apply bg-[var(--primary-light)] hover:bg-[var(--secondary)] border-2 border-[var(--secondary)] text-white font-semibold py-6 px-8 rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl hover:scale-105;
   }
-  to {
-    transform: translateX(-100%);
-    opacity: 0;
+
+  .counter-btn {
+    @apply bg-[var(--secondary)] hover:bg-[var(--secondary-light)] text-white font-bold text-2xl w-14 h-14 rounded-full transition-all duration-200 shadow-lg hover:shadow-xl;
   }
-}
-
-@keyframes fade-in {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* -------------------- */
-/* Custom Utilities     */
-/* -------------------- */
-
-.nfc-scanner {
-  animation: nfc-pulse 2s ease-in-out infinite;
-}
-
-.slide-in-right {
-  animation: slide-in-right 0.3s ease-out forwards;
-}
-
-.slide-out-left {
-  animation: slide-out-left 0.3s ease-out forwards;
-}
-
-.fade-in {
-  animation: fade-in 0.5s ease-out forwards;
-}
-
-.glass-effect {
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
 }

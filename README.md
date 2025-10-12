@@ -1,67 +1,191 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Riviera Zwembad - NFC Scanner Application
 
-## Getting Started
+A Next.js web application for scanning NFC wristbands at Preston Palace Almelo's Riviera Swimming Pool.
 
-First, run the development server:
+## Features
+
+- **NFC Scanning**: Uses Web NFC API to read wristband IDs
+- **Guest Type Classification**: Hotelgast, Daggast, or Zwembadgast
+- **Visitor Counting**: Track adults and children
+- **Check-in/Check-out**: Automatic detection of entry vs exit scans
+- **Data Storage**: JSON file-based storage with timestamps
+- **Employee-Friendly UI**: Large buttons, clear flow, easy navigation
+
+## Technology Stack
+
+- **Framework**: Next.js 15.5.4
+- **Styling**: Tailwind CSS 4
+- **Icons**: Lucide React
+- **Runtime**: Node.js
+- **Deployment**: Coolify with Nixpacks
+
+## Color Scheme
+
+Preston Palace Riviera brand colors:
+- Primary: `#072B31` (Dark teal)
+- Secondary: `#49C5B1` (Turquoise)
+- Accent: `#EFBE7D` (Gold)
+- Success: `#2A9D8F` (Success green)
+- Error: `#E76F51` (Error red)
+
+## User Flow
+
+1. **Scan**: Employee scans the NFC wristband
+2. **Detection**: System checks if this is entry or exit
+   - If existing active scan → Checkout
+   - If no active scan → Check-in
+3. **Guest Type** (Check-in only): Select Hotelgast, Daggast, or Zwembadgast
+4. **Visitor Count** (Check-in only): Count adults and children
+5. **Success**: Confirmation message with auto-redirect
+
+## API Endpoints
+
+### `GET /api/scans`
+Retrieve all scans or a specific scan by ID.
+
+**Query Parameters:**
+- `id` (optional): NFC wristband ID
+
+**Response:**
+```json
+[
+  {
+    "id": "04:a8:52:ca:70:1d:90",
+    "type": "hotelgast",
+    "adults": 2,
+    "children": 1,
+    "entryTime": "2025-10-12T10:00:00.000Z",
+    "endTime": null
+  }
+]
+```
+
+### `POST /api/scans`
+Create a new scan entry (check-in).
+
+**Body:**
+```json
+{
+  "id": "04:a8:52:ca:70:1d:90",
+  "type": "hotelgast",
+  "adults": 2,
+  "children": 1
+}
+```
+
+### `PATCH /api/scans`
+Update scan with exit time (check-out).
+
+**Body:**
+```json
+{
+  "id": "04:a8:52:ca:70:1d:90"
+}
+```
+
+## Development
+
+### Prerequisites
+
+- Node.js 20+
+- npm or yarn
+- NFC-enabled Android device for testing (with Chrome/Edge)
+
+### Installation
+
+```bash
+npm install
+```
+
+### Run Development Server
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+**Note**: NFC functionality requires HTTPS and won't work in local development without proper SSL setup.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### Build
 
-## Learn More
+```bash
+npm run build
+```
 
-To learn more about Next.js, take a look at the following resources:
+### Start Production Server
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+npm run start
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Deployment
 
-## Deploy on Vercel
+See [DEPLOYMENT.md](./DEPLOYMENT.md) for detailed Coolify deployment instructions.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+**Key Requirements:**
+- Persistent storage mounted at `/app/data`
+- HTTPS enabled (automatic with Coolify)
+- Port 3000
+- Nixpacks build pack
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## NFC Requirements
 
-## Storage (Vercel Blob)
+The Web NFC API requires:
+- Android device with NFC hardware
+- Chrome or Edge browser
+- HTTPS connection
+- User permission grant
 
-This app stores guest entries as a single JSON file in [Vercel Blob](https://vercel.com/docs/vercel-blob): `guest-entries.json`.
+**Supported Devices:**
+- Android 7.0+ with NFC
+- Tablets with NFC capability
 
-- Required env var when not deployed on the same Vercel project as your Blob store: `BLOB_READ_WRITE_TOKEN`.
-- On Vercel, create a Blob store in your Project > Storage, and Vercel will inject `BLOB_READ_WRITE_TOKEN` automatically. For local dev, run `vercel env pull` to sync envs.
+**Not Supported:**
+- iOS devices (Web NFC not available)
+- Desktop browsers (no NFC hardware)
 
-### Local dev
+## Data Storage
 
-1. Ensure you have a Blob store connected to your Vercel project. In the dashboard, Storage > Create > Blob.
-2. Pull envs locally so the SDK can authenticate:
+Scan data is stored in `/app/data/scans.json` with the following structure:
 
-   - `vercel env pull` (requires Vercel CLI)
+```json
+[
+  {
+    "id": "04:a8:52:ca:70:1d:90",
+    "type": "hotelgast",
+    "adults": 2,
+    "children": 1,
+    "entryTime": "2025-10-12T10:00:00.000Z",
+    "endTime": "2025-10-12T14:30:00.000Z"
+  }
+]
+```
 
-3. Run the dev server and test endpoints:
+## Project Structure
 
-	- GET `/api/guests`
-	- POST `/api/guests` with JSON body: `{ "action": "checkin", "id": "<nfc-id>", "type": "hotelgast", "adults": 2, "children": 1 }`
-	- POST `/api/guests` with `{ "action": "checkout", "id": "<nfc-id>" }`
-	- GET `/api/guests/check/<id>`
+```
+gastmeting/
+├── src/
+│   ├── app/
+│   │   ├── api/
+│   │   │   └── scans/
+│   │   │       └── route.ts      # API endpoints
+│   │   ├── globals.css           # Custom styling
+│   │   ├── layout.tsx            # Root layout
+│   │   └── page.tsx              # Main application
+│   └── ...
+├── data/
+│   └── scans.json               # Scan data (auto-created)
+├── DEPLOYMENT.md                # Deployment guide
+└── package.json
+```
 
-### Seed data (optional)
+## License
 
-To initialize the store from `data/guest-entries.json`, call:
+Proprietary - Preston Palace Almelo
 
-- POST `/api/guests/seed` (works in development by default). In production, set `SEED_KEY` and call `/api/guests/seed?key=YOUR_KEY`.
+## Support
 
-### Notes on caching
+For issues or questions, contact the Preston Palace IT department.
 
-Blob reads are cached by Vercel and browsers. This app sets `cacheControlMaxAge: 60` when writing the JSON to reduce staleness. If you observe stale data, wait up to a minute or add a cache-busting query string when fetching.

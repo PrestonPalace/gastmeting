@@ -1,254 +1,370 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import NFCScanner from '../components/NFCScanner';
-import GuestTypeSelector from '../components/GuestTypeSelector';
-import GuestCountSelector from '../components/GuestCountSelector';
-import CompletionScreen from '../components/CompletionScreen';
-import { GuestType, GuestData } from '../types';
-import { upsertLocalEntry, markLocalCheckout, hasActiveLocal } from '../lib/localStore';
+import { Scan, Users, User, Baby, CheckCircle, ArrowLeft, Radio } from 'lucide-react';
 
-type Step = 'scan' | 'type' | 'count' | 'complete';
+type GuestType = 'hotelgast' | 'daggast' | 'zwembadgast' | null;
+type Step = 'scan' | 'check-status' | 'guest-type' | 'visitor-count' | 'success';
 
 export default function Home() {
-  const [currentStep, setCurrentStep] = useState<Step>('scan');
+  const [step, setStep] = useState<Step>('scan');
   const [nfcId, setNfcId] = useState<string>('');
-  const [guestType, setGuestType] = useState<GuestType | null>(null);
-  const [adults, setAdults] = useState<number>(1);
-  const [children, setChildren] = useState<number>(0);
-  const [isExistingGuest, setIsExistingGuest] = useState<boolean>(false);
-  const [warning, setWarning] = useState<string>('');
+  const [guestType, setGuestType] = useState<GuestType>(null);
+  const [adults, setAdults] = useState(0);
+  const [children, setChildren] = useState(0);
+  const [isScanning, setIsScanning] = useState(false);
+  const [error, setError] = useState<string>('');
+  const [isCheckingOut, setIsCheckingOut] = useState(false);
 
-  const handleNFCScanned = (id: string, isCheckout: boolean = false) => {
-    setNfcId(id);
-    setIsExistingGuest(isCheckout);
-    
-    if (isCheckout) {
-      // Handle checkout - this should complete immediately
-      handleCheckout(id);
+  useEffect(() => {
+    // Check if Web NFC is supported
+    if ('NDEFReader' in window) {
+      console.log('Web NFC is supported');
     } else {
-      // New entry - proceed to type selection
-      setCurrentStep('type');
+      console.warn('Web NFC is not supported on this device/browser');
+    }
+  }, []);
+
+  const startNfcScan = async () => {
+    setError('');
+    setIsScanning(true);
+
+    try {
+      if ('NDEFReader' in window) {
+        // @ts-ignore - NDEFReader is not in TypeScript definitions yet
+        const ndef = new NDEFReader();
+        await ndef.scan();
+
+        ndef.addEventListener('reading', ({ serialNumber }: any) => {
+          console.log('NFC tag detected:', serialNumber);
+          setNfcId(serialNumber);
+          setIsScanning(false);
+          setStep('check-status');
+          checkScanStatus(serialNumber);
+        });
+
+        ndef.addEventListener('readingerror', () => {
+          setError('Fout bij het lezen van de armband');
+          setIsScanning(false);
+        });
+      } else {
+        setError('NFC wordt niet ondersteund op dit apparaat');
+        setIsScanning(false);
+      }
+    } catch (err: any) {
+      console.error('NFC Error:', err);
+      setError(err.message || 'Fout bij het starten van NFC scan');
+      setIsScanning(false);
+    }
+  };
+
+  const checkScanStatus = async (id: string) => {
+    try {
+      const response = await fetch(`/api/scans?id=${encodeURIComponent(id)}`);
+      
+      if (response.ok) {
+        const scan = await response.json();
+        if (scan && !scan.endTime) {
+          // Active scan exists, this is checkout
+          setIsCheckingOut(true);
+          await handleCheckout(id);
+        } else {
+          // No active scan, proceed to check-in
+          setIsCheckingOut(false);
+          setStep('guest-type');
+        }
+      } else {
+        // No active scan found, proceed to check-in
+        setIsCheckingOut(false);
+        setStep('guest-type');
+      }
+    } catch (err) {
+      console.error('Error checking scan status:', err);
+      // On error, assume check-in
+      setIsCheckingOut(false);
+      setStep('guest-type');
     }
   };
 
   const handleCheckout = async (id: string) => {
     try {
-      const response = await fetch('/api/guests', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          id,
-          action: 'checkout',
-        }),
+      const response = await fetch('/api/scans', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
       });
-      
+
       if (response.ok) {
-        const res = await response.json();
-        // Update local storage to mark checkout
-        const endTime = res?.data?.endTime ?? new Date().toISOString();
-        const duration = res?.data?.duration;
-        markLocalCheckout(id, endTime, duration);
-        // Verify server has active=false using forced check
-        const verify = await fetch(`/api/guests/check/${encodeURIComponent(id)}?force=1`);
-        const verifyJson = await verify.json();
-        if (verifyJson?.isCheckout) {
-          setWarning('Server still shows active after checkout. Please rescan or check connectivity.');
-        }
-        setCurrentStep('complete');
+        setStep('success');
+        setTimeout(() => resetFlow(), 3000);
+      } else {
+        const data = await response.json();
+        setError(data.error || 'Fout bij uitchecken');
+        setTimeout(() => resetFlow(), 3000);
       }
-    } catch (error) {
-      console.error('Error during checkout:', error);
+    } catch (err) {
+      console.error('Checkout error:', err);
+      setError('Fout bij uitchecken');
+      setTimeout(() => resetFlow(), 3000);
     }
   };
 
-  const handleTypeSelected = (type: GuestType) => {
+  const handleGuestTypeSelect = (type: GuestType) => {
     setGuestType(type);
-    setCurrentStep('count');
+    setStep('visitor-count');
   };
 
-  const handleCountSelected = async (adultCount: number, childrenCount: number) => {
-    setAdults(adultCount);
-    setChildren(childrenCount);
+  const handleSubmit = async () => {
+    if (!nfcId || !guestType) {
+      setError('Ontbrekende gegevens');
+      return;
+    }
 
-    // Submit the entry
     try {
-      const guestData: Omit<GuestData, 'entryTime'> = {
-        id: nfcId,
-        type: guestType!,
-        adults: adultCount,
-        children: childrenCount,
-      };
-
-      const response = await fetch('/api/guests', {
+      const response = await fetch('/api/scans', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...guestData,
-          action: 'checkin',
+          id: nfcId,
+          type: guestType,
+          adults,
+          children,
         }),
       });
 
       if (response.ok) {
-        const res = await response.json();
-        // Optimistically add to local storage
-        const entryTime = res?.data?.entryTime ?? new Date().toISOString();
-        upsertLocalEntry({ ...guestData, entryTime });
-        // Verify server acknowledges active using forced check
-        const verify = await fetch(`/api/guests/check/${encodeURIComponent(nfcId)}?force=1`);
-        const verifyJson = await verify.json();
-        const serverActive = !!verifyJson?.isCheckout;
-        const localActive = hasActiveLocal(nfcId);
-        if (localActive && !serverActive) {
-          setWarning('Gegevens lokaal opgeslagen maar niet bevestigd door server. Controleer internet en probeer opnieuw.');
-        }
-        setCurrentStep('complete');
+        setStep('success');
+        setTimeout(() => resetFlow(), 3000);
+      } else {
+        const data = await response.json();
+        setError(data.error || 'Fout bij opslaan');
       }
-    } catch (error) {
-      console.error('Error saving guest data:', error);
+    } catch (err) {
+      console.error('Submit error:', err);
+      setError('Fout bij opslaan van gegevens');
     }
   };
 
-  const resetForm = () => {
-    setCurrentStep('scan');
+  const resetFlow = () => {
+    setStep('scan');
     setNfcId('');
     setGuestType(null);
-    setAdults(1);
+    setAdults(0);
     setChildren(0);
-    setIsExistingGuest(false);
-    setWarning('');
-  };
-
-  const slideVariants = {
-    enter: (direction: number) => ({
-      x: direction > 0 ? 300 : -300,
-      opacity: 0
-    }),
-    center: {
-      x: 0,
-      opacity: 1
-    },
-    exit: (direction: number) => ({
-      x: direction < 0 ? 300 : -300,
-      opacity: 0
-    })
-  };
-
-  const getStepDirection = (step: Step): number => {
-    const steps: Step[] = ['scan', 'type', 'count', 'complete'];
-    return steps.indexOf(step);
+    setError('');
+    setIsCheckingOut(false);
   };
 
   return (
-    <main 
-      className="min-h-screen flex items-center justify-center p-4" 
-      style={{ 
-        background: 'linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 50%, var(--secondary) 100%)'
-      }}
-    >
+    <div className="min-h-screen flex flex-col items-center justify-center p-6">
       <div className="w-full max-w-2xl">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="text-center mb-8"
-        >
-          <h1 className="text-4xl font-bold text-white mb-2">
-            Riviera Zwembad – Gastregistratie
-          </h1>
-          <p className="text-white/80 text-lg">
-            Voor medewerkers • Preston Palace Almelo
-          </p>
-        </motion.div>
-
-        <div className="relative overflow-hidden rounded-2xl glass-effect min-h-[500px]">
-          {warning && (
-            <div className="absolute top-0 left-0 right-0 bg-yellow-500/80 text-black text-center p-2 z-10">
-              {warning}
-            </div>
-          )}
-          <AnimatePresence mode="wait" custom={getStepDirection(currentStep)}>
-            {currentStep === 'scan' && (
-              <motion.div
-                key="scan"
-                custom={getStepDirection(currentStep)}
-                variants={slideVariants}
-                initial="enter"
-                animate="center"
-                exit="exit"
-                transition={{
-                  x: { type: "spring", stiffness: 300, damping: 30 },
-                  opacity: { duration: 0.2 }
-                }}
-              >
-                <NFCScanner onNFCScanned={handleNFCScanned} />
-              </motion.div>
-            )}
-
-            {currentStep === 'type' && (
-              <motion.div
-                key="type"
-                custom={getStepDirection(currentStep)}
-                variants={slideVariants}
-                initial="enter"
-                animate="center"
-                exit="exit"
-                transition={{
-                  x: { type: "spring", stiffness: 300, damping: 30 },
-                  opacity: { duration: 0.2 }
-                }}
-              >
-                <GuestTypeSelector onTypeSelected={handleTypeSelected} />
-              </motion.div>
-            )}
-
-            {currentStep === 'count' && (
-              <motion.div
-                key="count"
-                custom={getStepDirection(currentStep)}
-                variants={slideVariants}
-                initial="enter"
-                animate="center"
-                exit="exit"
-                transition={{
-                  x: { type: "spring", stiffness: 300, damping: 30 },
-                  opacity: { duration: 0.2 }
-                }}
-              >
-                <GuestCountSelector
-                  onCountSelected={handleCountSelected}
-                  initialAdults={adults}
-                  initialChildren={children}
-                />
-              </motion.div>
-            )}
-
-            {currentStep === 'complete' && (
-              <motion.div
-                key="complete"
-                custom={getStepDirection(currentStep)}
-                variants={slideVariants}
-                initial="enter"
-                animate="center"
-                exit="exit"
-                transition={{
-                  x: { type: "spring", stiffness: 300, damping: 30 },
-                  opacity: { duration: 0.2 }
-                }}
-              >
-                <CompletionScreen
-                  isCheckout={isExistingGuest}
-                  onReset={resetForm}
-                />
-              </motion.div>
-            )}
-          </AnimatePresence>
+        {/* Header */}
+        <div className="text-center mb-8">
+          <h1 className="text-4xl font-bold mb-2">Riviera Zwembad</h1>
+          <p className="text-xl text-[var(--secondary)]">Preston Palace Almelo</p>
         </div>
+
+        {/* Error Message */}
+        {error && (
+          <div className="mb-6 p-4 bg-[var(--error)] rounded-lg text-white text-center">
+            {error}
+          </div>
+        )}
+
+        {/* Step: NFC Scan */}
+        {step === 'scan' && (
+          <div className="card text-center animate-fade-in">
+            <div className="mb-8">
+              <div className="inline-flex items-center justify-center w-32 h-32 bg-[var(--secondary)] rounded-full mb-6 relative">
+                <Scan className="w-16 h-16 text-white" />
+                {isScanning && (
+                  <div className="absolute inset-0 rounded-full border-4 border-white/30 border-t-white animate-spin"></div>
+                )}
+              </div>
+              <h2 className="text-3xl font-bold mb-4">
+                {isScanning ? 'Scanning...' : 'Scan NFC Armband'}
+              </h2>
+              <p className="text-lg text-white/80">
+                Houd de armband tegen de scanner
+              </p>
+            </div>
+            <button
+              onClick={startNfcScan}
+              disabled={isScanning}
+              className="btn-primary w-full text-xl disabled:opacity-50"
+            >
+              {isScanning ? 'Scannen...' : 'Start Scan'}
+            </button>
+          </div>
+        )}
+
+        {/* Step: Guest Type Selection */}
+        {step === 'guest-type' && (
+          <div className="card animate-slide-in">
+            <button
+              onClick={() => setStep('scan')}
+              className="btn-back mb-6 flex items-center gap-2"
+            >
+              <ArrowLeft className="w-5 h-5" />
+              Terug
+            </button>
+            <h2 className="text-3xl font-bold mb-8 text-center">
+              Wat voor type gast is dit?
+            </h2>
+            <div className="space-y-4">
+              <button
+                onClick={() => handleGuestTypeSelect('hotelgast')}
+                className="guest-type-btn w-full flex items-center justify-center gap-3"
+              >
+                <Users className="w-6 h-6" />
+                <span className="text-xl">Hotelgast</span>
+              </button>
+              <button
+                onClick={() => handleGuestTypeSelect('daggast')}
+                className="guest-type-btn w-full flex items-center justify-center gap-3"
+              >
+                <User className="w-6 h-6" />
+                <span className="text-xl">Daggast</span>
+              </button>
+              <button
+                onClick={() => handleGuestTypeSelect('zwembadgast')}
+                className="guest-type-btn w-full flex items-center justify-center gap-3"
+              >
+                <Radio className="w-6 h-6" />
+                <span className="text-xl">Zwembadgast</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Step: Visitor Count */}
+        {step === 'visitor-count' && (
+          <div className="card animate-slide-in">
+            <button
+              onClick={() => setStep('guest-type')}
+              className="btn-back mb-6 flex items-center gap-2"
+            >
+              <ArrowLeft className="w-5 h-5" />
+              Terug
+            </button>
+            <h2 className="text-3xl font-bold mb-8 text-center">
+              Wie zijn er?
+            </h2>
+            
+            {/* Adults Counter */}
+            <div className="mb-8">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <User className="w-8 h-8 text-[var(--secondary)]" />
+                  <span className="text-2xl font-semibold">Volwassenen</span>
+                </div>
+                <span className="text-3xl font-bold text-[var(--accent)]">{adults}</span>
+              </div>
+              <div className="flex items-center justify-center gap-6">
+                <button
+                  onClick={() => setAdults(Math.max(0, adults - 1))}
+                  className="counter-btn"
+                  disabled={adults === 0}
+                >
+                  -
+                </button>
+                <span className="text-4xl font-bold w-20 text-center">{adults}</span>
+                <button
+                  onClick={() => setAdults(adults + 1)}
+                  className="counter-btn"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+
+            {/* Children Counter */}
+            <div className="mb-8">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <Baby className="w-8 h-8 text-[var(--secondary)]" />
+                  <span className="text-2xl font-semibold">Kinderen</span>
+                </div>
+                <span className="text-3xl font-bold text-[var(--accent)]">{children}</span>
+              </div>
+              <div className="flex items-center justify-center gap-6">
+                <button
+                  onClick={() => setChildren(Math.max(0, children - 1))}
+                  className="counter-btn"
+                  disabled={children === 0}
+                >
+                  -
+                </button>
+                <span className="text-4xl font-bold w-20 text-center">{children}</span>
+                <button
+                  onClick={() => setChildren(children + 1)}
+                  className="counter-btn"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+
+            <button
+              onClick={handleSubmit}
+              disabled={adults === 0 && children === 0}
+              className="btn-primary w-full text-xl disabled:opacity-50"
+            >
+              Bevestigen
+            </button>
+          </div>
+        )}
+
+        {/* Step: Success */}
+        {step === 'success' && (
+          <div className="card text-center animate-fade-in">
+            <div className="mb-6">
+              <div className="inline-flex items-center justify-center w-32 h-32 bg-[var(--success)] rounded-full mb-6">
+                <CheckCircle className="w-16 h-16 text-white" />
+              </div>
+              <h2 className="text-3xl font-bold mb-4">
+                {isCheckingOut ? 'Uitgecheckt!' : 'Ingecheckt!'}
+              </h2>
+              <p className="text-lg text-white/80">
+                {isCheckingOut 
+                  ? 'De gast is succesvol uitgecheckt'
+                  : 'De gegevens zijn succesvol opgeslagen'}
+              </p>
+            </div>
+          </div>
+        )}
       </div>
-    </main>
+
+      <style jsx>{`
+        @keyframes fade-in {
+          from {
+            opacity: 0;
+          }
+          to {
+            opacity: 1;
+          }
+        }
+
+        @keyframes slide-in {
+          from {
+            opacity: 0;
+            transform: translateX(20px);
+          }
+          to {
+            opacity: 1;
+            transform: translateX(0);
+          }
+        }
+
+        .animate-fade-in {
+          animation: fade-in 0.3s ease-out;
+        }
+
+        .animate-slide-in {
+          animation: slide-in 0.3s ease-out;
+        }
+      `}</style>
+    </div>
   );
 }
+
