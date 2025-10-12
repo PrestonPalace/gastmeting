@@ -44,9 +44,24 @@ export async function GET(request: NextRequest) {
 
       // Read file content
       const content = await fs.readFile(DATA_FILE, 'utf-8');
-      const scans = JSON.parse(content);
-      info.scansCount = scans.length;
-      info.lastScan = scans.length > 0 ? scans[scans.length - 1] : null;
+      info.rawFileContent = content.substring(0, 500); // First 500 chars
+      info.fileContentLength = content.length;
+      
+      try {
+        const scans = JSON.parse(content);
+        
+        if (Array.isArray(scans)) {
+          info.scansCount = scans.length;
+          info.lastScan = scans.length > 0 ? scans[scans.length - 1] : null;
+          info.contentValid = true;
+        } else {
+          info.contentValid = false;
+          info.contentError = 'File content is not an array';
+        }
+      } catch (parseError: any) {
+        info.contentValid = false;
+        info.parseError = parseError.message;
+      }
     } catch (fileError: any) {
       info.fileExists = false;
       info.fileError = fileError.message;

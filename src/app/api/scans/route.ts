@@ -32,6 +32,13 @@ async function readScans(): Promise<Scan[]> {
     await ensureDataDir();
     const data = await fs.readFile(DATA_FILE, 'utf-8');
     const scans = JSON.parse(data);
+    
+    // Ensure we always return an array
+    if (!Array.isArray(scans)) {
+      console.warn('Scans file contains invalid data (not an array), returning empty array');
+      return [];
+    }
+    
     console.log(`Read ${scans.length} scans from file`);
     return scans;
   } catch (error: any) {
