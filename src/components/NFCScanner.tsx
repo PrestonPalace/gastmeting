@@ -14,11 +14,12 @@ export default function NFCScanner({ onScanSuccess, onScanError }: NFCScannerPro
   const [error, setError] = useState<string>('');
 
   const handleStartScan = async () => {
+    console.log('Start Scan button clicked');
     setError('');
     setIsScanning(true);
 
     // Check support first
-    if (!NFCReader.isSupported()) {
+    if (!('NDEFReader' in window)) {
       const errorMsg = 'NFC wordt niet ondersteund op dit apparaat. Gebruik Chrome of Edge op Android.';
       setError(errorMsg);
       setIsScanning(false);
@@ -26,25 +27,44 @@ export default function NFCScanner({ onScanSuccess, onScanError }: NFCScannerPro
       return;
     }
 
-    const reader = new NFCReader();
-
     try {
-      await reader.startScan(
-        // On successful read
-        (result) => {
-          console.log('NFC tag read:', result.serialNumber);
-          setIsScanning(false);
-          onScanSuccess(result.serialNumber);
-        },
-        // On read error
-        (errorMessage) => {
-          setError(errorMessage);
-          setIsScanning(false);
-          if (onScanError) onScanError(errorMessage);
-        }
-      );
+      // Create NDEFReader - MUST use window.NDEFReader
+      // @ts-ignore
+      const ndef = new window.NDEFReader();
+      console.log('NDEFReader created');
+
+      // Set up event listeners BEFORE calling scan
+      ndef.addEventListener('readingerror', () => {
+        console.log('NFC read error');
+        const errorMsg = 'Kan NFC tag niet lezen. Probeer opnieuw.';
+        setError(errorMsg);
+        setIsScanning(false);
+        if (onScanError) onScanError(errorMsg);
+      });
+
+      ndef.addEventListener('reading', ({ message, serialNumber }: any) => {
+        console.log('NFC tag read:', serialNumber);
+        setIsScanning(false);
+        onScanSuccess(serialNumber);
+      });
+
+      // CRITICAL: Call scan() DIRECTLY in the click handler
+      // This is required for the permission prompt to work
+      await ndef.scan();
+      console.log('NFC scan started successfully - waiting for tag...');
+
     } catch (err: any) {
-      const errorMsg = err.message || 'NFC scannen mislukt. Probeer opnieuw.';
+      console.error('NFC Error:', err);
+      let errorMsg = 'NFC scannen mislukt.';
+      
+      if (err.name === 'NotAllowedError') {
+        errorMsg = 'NFC toegang geweigerd. Geef toestemming in de browser en probeer opnieuw.';
+      } else if (err.name === 'NotSupportedError') {
+        errorMsg = 'NFC wordt niet ondersteund op dit apparaat.';
+      } else if (err.message) {
+        errorMsg = err.message;
+      }
+      
       setError(errorMsg);
       setIsScanning(false);
       if (onScanError) onScanError(errorMsg);
